@@ -1,0 +1,31 @@
+node_modules
+.DS_Store
+dist
+dist-ssr
+*.local
+.env*
+.nitro
+.tanstack
+.wrangler
+.output
+.vinxi
+__unconfig*
+todos.json
+
+# turbo
+.turbo
+
+# typescript
+*.tsbuildinfo
+
+# storybook
+storybook-static
+*.log
+
+# local agent scratch (kept on disk, never committed)
+.scratchpad/
+
+# Local review records and agent runtime
+.data/
+**/.data/
+.eve/

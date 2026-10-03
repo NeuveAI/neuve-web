@@ -1,0 +1,51 @@
+{
+  "name": "@workspace/diffs",
+  "version": "1.5.1-neuve.0",
+  "description": "Neuve fork of @pierre/diffs (Apache-2.0) with an overlay annotation layer. See NOTICE.md.",
+  "license": "apache-2.0",
+  "private": true,
+  "type": "module",
+  "sideEffects": [
+    "./src/components/web-components.ts"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/types/index.d.ts",
+      "default": "./src/index.ts"
+    },
+    "./edit": {
+      "types": "./dist/types/edit/index.d.ts",
+      "default": "./src/edit/index.ts"
+    },
+    "./worker": {
+      "types": "./dist/types/worker/index.d.ts",
+      "default": "./src/worker/index.ts"
+    },
+    "./worker/worker.js": {
+      "types": "./dist/types/worker/worker.d.ts",
+      "default": "./src/worker/worker.ts"
+    },
+    "./style.css": "./src/style.css"
+  },
+  "scripts": {
+    "test": "bun test --timeout 15000",
+    "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.build.json"
+  },
+  "dependencies": {
+    "@pierre/theme": "2.0.0",
+    "@pierre/theming": "1.0.1",
+    "@shikijs/themes": "4.4.3",
+    "@shikijs/transformers": "4.4.3",
+    "diff": "9.0.0",
+    "hast-util-to-html": "9.0.5",
+    "lru_map": "0.4.1",
+    "shiki": "4.4.3"
+  },
+  "devDependencies": {
+    "@types/bun": "1.4.0",
+    "@types/hast": "3.0.4",
+    "@types/jsdom": "28.0.1",
+    "jsdom": "26.1.0",
+    "typescript": "^6.0.2"
+  }
+}

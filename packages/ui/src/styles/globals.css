@@ -1,0 +1,475 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+@import "@fontsource-variable/geist";
+@import "@fontsource-variable/geist-mono";
+
+@custom-variant dark (&:is(.dark *));
+@source "../../../apps/**/*.{ts,tsx}";
+@source "../**/*.{ts,tsx}";
+
+/*
+ * Neuve brand tokens.
+ *
+ * Exact hexes come from the approved design source: Main.dc.html .theme-light /
+ * .theme-dark is the single canonical palette; Overview.dc.html only adds the
+ * lane tokens Main does not use (on-req, agt-tint*, agt-ink, sta-fill, sta-ink),
+ * with identical values for every shared token. Their origin is neuve_effect's golden-grass (accent / suggested),
+ * hopbush (human-required) and ocean-green (agentic) scales.
+ *
+ * Raw values live in `--nv-*`. shadcn's semantic variables are mapped onto them
+ * below, and `@theme inline` exposes both as Tailwind colors. Light is the
+ * default (user decision); `.dark` on <html> switches the whole page.
+ */
+:root {
+  color-scheme: light;
+
+  --nv-bg: #faf8f3;
+  --nv-surface: #ffffff;
+  --nv-raised: #f3efe6;
+  --nv-raised-2: #eae4d6;
+  --nv-select: #efeadd;
+  --nv-line: #e6e0d4;
+  --nv-line-2: #eee9df;
+  --nv-ink: #1c1a16;
+  --nv-ink-2: #45413a;
+  --nv-muted: #6b665c;
+  --nv-faint: #9a9488;
+
+  --nv-add-bg: #eaf6ee;
+  --nv-add-num: #ddf0e3;
+  --nv-add-fg: #17784a;
+  --nv-add-ln: #3e7a57;
+  --nv-del-bg: #fcedeb;
+  --nv-del-num: #f7deda;
+  --nv-del-fg: #b03a2e;
+  --nv-del-ln: #9a4a40;
+  --nv-hunk: #fbfaf6;
+  --nv-expand: #f6f3ec;
+
+  --nv-syn-kw: #8e265f;
+  --nv-syn-st: #0c6944;
+  --nv-syn-fn: #1f4f8f;
+  --nv-syn-cm: #8a8478;
+  --nv-syn-nu: #8b5b18;
+  --nv-syn-id: #1c1a16;
+  --nv-syn-pl: #45413a;
+
+  --nv-req: #c63d8e;
+  --nv-req-fg: #ac2973;
+  --nv-req-tint: #fce8f7;
+  --nv-req-tint-2: #f6d4ec;
+  --nv-req-ink: #8e265f;
+  --nv-on-req: #ffffff;
+  --nv-sug: #ad7c1c;
+  --nv-sug-fg: #8b5b18;
+  --nv-sug-tint: #f5f0ca;
+  --nv-sug-tint-2: #ece09a;
+  --nv-sug-ink: #734a20;
+  --nv-agt: #148252;
+  --nv-agt-fg: #0c6944;
+  --nv-agt-tint: #edfcf2;
+  --nv-agt-tint-2: #b3e8c8;
+  --nv-agt-ink: #0a452e;
+  --nv-sta: #78736a;
+  --nv-sta-fill: #e6e0d4;
+  --nv-sta-ink: #45413a;
+
+  --nv-accent: #d2a62b;
+  --nv-accent-hover: #d7b33a;
+  --nv-accent-ink: #3a200d;
+  --nv-focus: #d2a62b;
+  --nv-open-line: #e2ca5e;
+
+  --nv-dock: #1c1a16;
+  --nv-dock-fg: #faf8f3;
+  --nv-dock-muted: #b3ac9e;
+  --nv-dock-hover: #2d2a25;
+  --nv-dock-line: #3a362f;
+
+  --nv-ro-bg: #f4f1ea;
+  --nv-ro-row: #f4f1ea;
+  --nv-ro-add: #ece8df;
+  --nv-ro-del: #efebe4;
+  --nv-ro-ink: #8a8478;
+
+  --nv-peek-bg: #1c1a16;
+  --nv-peek-fg: #faf8f3;
+  --nv-shadow-card:
+    0 0 0 1px rgba(28, 26, 22, 0.06), 0 12px 32px rgba(28, 26, 22, 0.14);
+  --nv-shadow-dock:
+    0 0 0 1px rgba(28, 26, 22, 0.08), 0 16px 40px rgba(28, 26, 22, 0.2);
+  --nv-shadow-peek: 0 8px 24px rgba(0, 0, 0, 0.18);
+  --nv-scrim: rgba(28, 26, 22, 0.18);
+
+  /* Capture mini-player: always a dark media surface, in both themes. */
+  --nv-player-bg: #0e0d0c;
+  --nv-player-fg: #edeae3;
+  --nv-player-ink: #141311;
+  --nv-player-muted: #b3ac9e;
+  --nv-player-badge: #3a1a2e;
+  --nv-player-badge-fg: #f6d4ec;
+  --nv-player-progress: #e2ca5e;
+
+  /* shadcn semantic mapping */
+  --background: var(--nv-bg);
+  --foreground: var(--nv-ink);
+  --card: var(--nv-surface);
+  --card-foreground: var(--nv-ink);
+  --popover: var(--nv-surface);
+  --popover-foreground: var(--nv-ink);
+  --primary: var(--nv-accent);
+  --primary-foreground: var(--nv-accent-ink);
+  --secondary: var(--nv-raised);
+  --secondary-foreground: var(--nv-ink);
+  --muted: var(--nv-raised);
+  --muted-foreground: var(--nv-muted);
+  --accent: var(--nv-raised);
+  --accent-foreground: var(--nv-ink);
+  --destructive: var(--nv-del-fg);
+  --border: var(--nv-line);
+  --input: var(--nv-line);
+  --ring: var(--nv-focus);
+  --radius: 0.625rem;
+}
+
+.dark {
+  color-scheme: dark;
+
+  --nv-bg: #141311;
+  --nv-surface: #1b1a17;
+  --nv-raised: #23211e;
+  --nv-raised-2: #2c2925;
+  --nv-select: #2a2723;
+  --nv-line: #2e2b27;
+  --nv-line-2: #262420;
+  --nv-ink: #edeae3;
+  --nv-ink-2: #c9c4b8;
+  --nv-muted: #9c968a;
+  --nv-faint: #6f6a60;
+
+  --nv-add-bg: #15281c;
+  --nv-add-num: #1a3323;
+  --nv-add-fg: #6bd49a;
+  --nv-add-ln: #86bc99;
+  --nv-del-bg: #2d1a18;
+  --nv-del-num: #3a201d;
+  --nv-del-fg: #ff8f84;
+  --nv-del-ln: #d3918a;
+  --nv-hunk: #1e1c19;
+  --nv-expand: #211f1b;
+
+  --nv-syn-kw: #efa0d3;
+  --nv-syn-st: #8fdcb2;
+  --nv-syn-fn: #9dbdf2;
+  --nv-syn-cm: #7e796e;
+  --nv-syn-nu: #e8cf70;
+  --nv-syn-id: #edeae3;
+  --nv-syn-pl: #c9c4b8;
+
+  --nv-req: #e680c5;
+  --nv-req-fg: #efb1dc;
+  --nv-req-tint: #3a1a2e;
+  --nv-req-tint-2: #4a2139;
+  --nv-req-ink: #f6d4ec;
+  --nv-on-req: #2a0f1f;
+  --nv-sug: #e2ca5e;
+  --nv-sug-fg: #ece09a;
+  --nv-sug-tint: #332a10;
+  --nv-sug-tint-2: #45391a;
+  --nv-sug-ink: #f5f0ca;
+  --nv-agt: #44be82;
+  --nv-agt-fg: #8fdcb2;
+  --nv-agt-tint: #132a1e;
+  --nv-agt-tint-2: #1f4a33;
+  --nv-agt-ink: #d7f4e1;
+  --nv-sta: #9a9488;
+  --nv-sta-fill: #2e2b27;
+  --nv-sta-ink: #c9c4b8;
+
+  --nv-accent: #e2ca5e;
+  --nv-accent-hover: #ecd878;
+  --nv-accent-ink: #2a1a08;
+  --nv-focus: #e2ca5e;
+  --nv-open-line: #8b6e1e;
+
+  --nv-dock: #2c2925;
+  --nv-dock-fg: #edeae3;
+  --nv-dock-muted: #a8a195;
+  --nv-dock-hover: #38342f;
+  --nv-dock-line: #45403a;
+
+  --nv-ro-bg: #181715;
+  --nv-ro-row: #181715;
+  --nv-ro-add: #1f1e1b;
+  --nv-ro-del: #211f1c;
+  --nv-ro-ink: #76716a;
+
+  --nv-peek-bg: #edeae3;
+  --nv-peek-fg: #1b1a17;
+  --nv-shadow-card:
+    0 0 0 1px rgba(255, 255, 255, 0.07), 0 16px 40px rgba(0, 0, 0, 0.55);
+  --nv-shadow-dock:
+    0 0 0 1px rgba(255, 255, 255, 0.08), 0 16px 40px rgba(0, 0, 0, 0.6);
+  --nv-scrim: rgba(0, 0, 0, 0.45);
+}
+
+@theme inline {
+  --font-heading: var(--font-sans);
+  --font-sans: "Geist Variable", "Geist", system-ui, sans-serif;
+  --font-mono: "Geist Mono Variable", "Geist Mono", ui-monospace, monospace;
+
+  /* shadcn semantic colors */
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --color-foreground: var(--foreground);
+  --color-background: var(--background);
+
+  /* Neuve product colors */
+  --color-paper: var(--nv-bg);
+  --color-surface: var(--nv-surface);
+  --color-raised: var(--nv-raised);
+  --color-raised-2: var(--nv-raised-2);
+  --color-select: var(--nv-select);
+  --color-line: var(--nv-line);
+  --color-line-2: var(--nv-line-2);
+  --color-ink: var(--nv-ink);
+  --color-ink-2: var(--nv-ink-2);
+  --color-ink-muted: var(--nv-muted);
+  --color-faint: var(--nv-faint);
+  --color-add-bg: var(--nv-add-bg);
+  --color-add-num: var(--nv-add-num);
+  --color-add-fg: var(--nv-add-fg);
+  --color-add-ln: var(--nv-add-ln);
+  --color-del-bg: var(--nv-del-bg);
+  --color-del-num: var(--nv-del-num);
+  --color-del-fg: var(--nv-del-fg);
+  --color-del-ln: var(--nv-del-ln);
+  --color-hunk: var(--nv-hunk);
+  --color-expand: var(--nv-expand);
+  --color-syn-kw: var(--nv-syn-kw);
+  --color-syn-st: var(--nv-syn-st);
+  --color-syn-fn: var(--nv-syn-fn);
+  --color-syn-cm: var(--nv-syn-cm);
+  --color-syn-nu: var(--nv-syn-nu);
+  --color-syn-id: var(--nv-syn-id);
+  --color-syn-pl: var(--nv-syn-pl);
+  --color-req: var(--nv-req);
+  --color-req-fg: var(--nv-req-fg);
+  --color-req-tint: var(--nv-req-tint);
+  --color-req-tint-2: var(--nv-req-tint-2);
+  --color-req-ink: var(--nv-req-ink);
+  --color-on-req: var(--nv-on-req);
+  --color-sug: var(--nv-sug);
+  --color-sug-fg: var(--nv-sug-fg);
+  --color-sug-tint: var(--nv-sug-tint);
+  --color-sug-tint-2: var(--nv-sug-tint-2);
+  --color-sug-ink: var(--nv-sug-ink);
+  --color-agt: var(--nv-agt);
+  --color-agt-fg: var(--nv-agt-fg);
+  --color-agt-tint: var(--nv-agt-tint);
+  --color-agt-tint-2: var(--nv-agt-tint-2);
+  --color-agt-ink: var(--nv-agt-ink);
+  --color-sta: var(--nv-sta);
+  --color-sta-fill: var(--nv-sta-fill);
+  --color-sta-ink: var(--nv-sta-ink);
+  --color-brand: var(--nv-accent);
+  --color-brand-hover: var(--nv-accent-hover);
+  --color-brand-ink: var(--nv-accent-ink);
+  --color-focus: var(--nv-focus);
+  --color-open-line: var(--nv-open-line);
+  --color-dock: var(--nv-dock);
+  --color-dock-fg: var(--nv-dock-fg);
+  --color-dock-muted: var(--nv-dock-muted);
+  --color-dock-hover: var(--nv-dock-hover);
+  --color-dock-line: var(--nv-dock-line);
+  --color-ro-bg: var(--nv-ro-bg);
+  --color-ro-row: var(--nv-ro-row);
+  --color-ro-add: var(--nv-ro-add);
+  --color-ro-del: var(--nv-ro-del);
+  --color-ro-ink: var(--nv-ro-ink);
+  --color-peek: var(--nv-peek-bg);
+  --color-peek-fg: var(--nv-peek-fg);
+  --color-scrim: var(--nv-scrim);
+  --color-player: var(--nv-player-bg);
+  --color-player-fg: var(--nv-player-fg);
+  --color-player-ink: var(--nv-player-ink);
+  --color-player-muted: var(--nv-player-muted);
+  --color-player-badge: var(--nv-player-badge);
+  --color-player-badge-fg: var(--nv-player-badge-fg);
+  --color-player-progress: var(--nv-player-progress);
+
+  --shadow-card: var(--nv-shadow-card);
+  --shadow-dock: var(--nv-shadow-dock);
+  --shadow-peek: var(--nv-shadow-peek);
+
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+/* Small uppercase mono label used across both screens (`.lbl` in the designs). */
+@utility label-mono {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--nv-muted);
+}
+
+/* L0 hint: dotted accent underline on a code line that carries markers. */
+@utility context-underline {
+  text-decoration: underline dotted var(--nv-accent);
+  text-decoration-thickness: 1.5px;
+  text-underline-offset: 5px;
+}
+
+/*
+ * Diff surface (@workspace/diffs, a Pierre fork) — brand tokens → renderer.
+ *
+ * Custom properties inherit into the renderer's shadow DOM, so the host class
+ * is the whole theme: the Shiki theme's token colours are `--diffs-token-*`
+ * variables, and Pierre's `*-override` variables take the diff colours. Both
+ * point at `--nv-*`, so `.dark` switches everything without re-highlighting.
+ * Outer styles beat the renderer's `:host` rules, which is how color-scheme
+ * follows the page instead of the Shiki theme type.
+ */
+.nv-diff {
+  color-scheme: light;
+  --diffs-font-family:
+    "Geist Mono Variable", "Geist Mono", ui-monospace, monospace;
+  --diffs-header-font-family: "Geist Variable", "Geist", system-ui, sans-serif;
+  --diffs-font-size: 12.5px;
+  --diffs-line-height: 24px;
+  --diffs-bg: var(--nv-surface);
+  --diffs-fg: var(--nv-syn-pl);
+
+  --diffs-foreground: var(--nv-syn-pl);
+  --diffs-background: var(--nv-surface);
+  --diffs-token-keyword: var(--nv-syn-kw);
+  --diffs-token-string: var(--nv-syn-st);
+  --diffs-token-string-expression: var(--nv-syn-st);
+  --diffs-token-function: var(--nv-syn-fn);
+  --diffs-token-comment: var(--nv-syn-cm);
+  --diffs-token-constant: var(--nv-syn-nu);
+  --diffs-token-parameter: var(--nv-syn-id);
+  --diffs-token-punctuation: var(--nv-syn-pl);
+  --diffs-token-link: var(--nv-syn-fn);
+
+  --diffs-bg-context-override: var(--nv-surface);
+  --diffs-bg-context-gutter-override: var(--nv-surface);
+  --diffs-bg-buffer-override: var(--nv-surface);
+  --diffs-bg-separator-override: var(--nv-expand);
+  --diffs-bg-hover-override: var(--nv-raised);
+  --diffs-fg-number-override: var(--nv-faint);
+  --diffs-fg-number-addition-override: var(--nv-add-ln);
+  --diffs-fg-number-deletion-override: var(--nv-del-ln);
+  --diffs-addition-color-override: var(--nv-add-fg);
+  --diffs-deletion-color-override: var(--nv-del-fg);
+  --diffs-modified-color-override: var(--nv-accent);
+  --diffs-bg-addition-override: var(--nv-add-bg);
+  --diffs-bg-addition-number-override: var(--nv-add-num);
+  --diffs-bg-addition-emphasis-override: var(--nv-add-num);
+  --diffs-bg-deletion-override: var(--nv-del-bg);
+  --diffs-bg-deletion-number-override: var(--nv-del-num);
+  --diffs-bg-deletion-emphasis-override: var(--nv-del-num);
+  --diffs-selection-color-override: var(--nv-accent);
+  --diffs-bg-selection-override: var(--nv-select);
+  --diffs-bg-selection-number-override: var(--nv-select);
+
+  /* Overlay layer (fork): L0 underline, expanded-anchor ring, focus. */
+  --diffs-overlay-anchor-color: var(--nv-accent);
+  --diffs-overlay-expanded-ring: var(--nv-open-line);
+  --diffs-overlay-active-ring: var(--nv-line);
+  /* A comment's lines on the code: open (strong) and pointed at (hint). */
+  --diffs-overlay-range-strong: color-mix(
+    in oklab,
+    var(--nv-accent) 18%,
+    transparent
+  );
+  --diffs-overlay-range-hint: color-mix(
+    in oklab,
+    var(--nv-accent) 9%,
+    transparent
+  );
+  --diffs-focus-ring: var(--nv-focus);
+}
+
+.dark .nv-diff {
+  color-scheme: dark;
+}
+
+/*
+ * Read-only neighbor (Main.dc.html `.ro`): muted grayscale — no syntax or
+ * diff colour, transparent number cells, faint signs.
+ */
+.nv-diff.nv-diff-readonly {
+  --diffs-bg: var(--nv-ro-bg);
+  --diffs-fg: var(--nv-ro-ink);
+  --diffs-foreground: var(--nv-ro-ink);
+  --diffs-background: var(--nv-ro-bg);
+  --diffs-token-keyword: var(--nv-ro-ink);
+  --diffs-token-string: var(--nv-ro-ink);
+  --diffs-token-string-expression: var(--nv-ro-ink);
+  --diffs-token-function: var(--nv-ro-ink);
+  --diffs-token-comment: var(--nv-ro-ink);
+  --diffs-token-constant: var(--nv-ro-ink);
+  --diffs-token-parameter: var(--nv-ro-ink);
+  --diffs-token-punctuation: var(--nv-ro-ink);
+  --diffs-token-link: var(--nv-ro-ink);
+  --diffs-bg-context-override: var(--nv-ro-row);
+  --diffs-bg-context-gutter-override: var(--nv-ro-row);
+  --diffs-bg-buffer-override: var(--nv-ro-row);
+  --diffs-bg-separator-override: var(--nv-ro-row);
+  --diffs-bg-hover-override: var(--nv-ro-row);
+  --diffs-fg-number-override: var(--nv-faint);
+  --diffs-fg-number-addition-override: var(--nv-faint);
+  --diffs-fg-number-deletion-override: var(--nv-faint);
+  --diffs-addition-color-override: var(--nv-faint);
+  --diffs-deletion-color-override: var(--nv-faint);
+  --diffs-bg-addition-override: var(--nv-ro-add);
+  --diffs-bg-addition-number-override: var(--nv-ro-add);
+  --diffs-bg-addition-emphasis-override: var(--nv-ro-add);
+  --diffs-bg-deletion-override: var(--nv-ro-del);
+  --diffs-bg-deletion-number-override: var(--nv-ro-del);
+  --diffs-bg-deletion-emphasis-override: var(--nv-ro-del);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  html {
+    @apply font-sans;
+  }
+  body {
+    @apply bg-background text-foreground;
+    margin: 0;
+    font-size: 14px;
+  }
+  button {
+    cursor: pointer;
+  }
+  :where(button, a, textarea, [tabindex]):focus-visible {
+    outline: 2px solid var(--nv-focus);
+    outline-offset: 2px;
+  }
+}

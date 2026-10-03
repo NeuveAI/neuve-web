@@ -1,0 +1,65 @@
+// Bun Snapshot v1, https://bun.sh/docs/test/snapshots
+
+exports[`file.patch fixture parses and renders the patch file: patch digest 1`] = `
+[
+  {
+    "files": [
+      {
+        "hunks": [
+          "a1@3720 d32@3720 split:32 unified:32 collapsedBefore:3719",
+        ],
+        "name": "/Users/shijie.rao/code/openai/project/oai-airflow-shared/oai_airflow_shared/applied_data_platform/lodestone/lodestone_config_notifications.yaml",
+        "prevName": undefined,
+        "totals": "split:3751 unified:3751 additionLines:1 deletionLines:32",
+        "type": "change",
+      },
+    ],
+    "patchIndex": 0,
+  },
+]
+`;
+
+exports[`file.patch fixture parses and renders the patch file: rendered rows 1`] = `
+{
+  "additions": [
+    "separator line-info",
+    "u3719/s3719 context #3720 ||",
+    "buffer x31",
+  ],
+  "deletions": [
+    "separator line-info",
+    "u3719/s3719 context #3720 ||",
+    "u3720/s3720 change-deletion #3721 ||",
+    "u3721/s3721 change-deletion #3722 |# Codex 2025 holiday campaign|",
+    "u3722/s3722 change-deletion #3723 |- airflow:|",
+    "u3723/s3723 change-deletion #3724 |    environment: prod|",
+    "u3724/s3724 change-deletion #3725 |    dag:|",
+    "u3725/s3725 change-deletion #3726 |      start_date: "2025-12-25T00:00:00Z"|",
+    "u3726/s3726 change-deletion #3727 |      schedule: "@daily"|",
+    "u3727/s3727 change-deletion #3728 |      audience: INTERNAL_APPLIED|",
+    "u3728/s3728 change-deletion #3729 |      urgency: MEDIUM|",
+    "u3729/s3729 change-deletion #3730 |      notification:|",
+    "u3730/s3730 change-deletion #3731 |        email: shijie.rao@openai.com|",
+    "u3731/s3731 change-deletion #3732 |        pagerduty: pagerduty-chatgpt-growth-retention-oncall|",
+    "u3732/s3732 change-deletion #3733 |      airflow_dataset_sensors:|",
+    "u3733/s3733 change-deletion #3734 |        - fully_qualified_table_name: analytics.scratch.shijie_codex_2025_holiday_campaign_user_id|",
+    "u3734/s3734 change-deletion #3735 |  databricks_source:|",
+    "u3735/s3735 change-deletion #3736 |    spark_sql: ||",
+    "u3736/s3736 change-deletion #3737 |      SELECT DISTINCT|",
+    "u3737/s3737 change-deletion #3738 |        user_id|",
+    "u3738/s3738 change-deletion #3739 |      FROM|",
+    "u3739/s3739 change-deletion #3740 |        analytics.scratch.shijie_codex_2025_holiday_campaign_user_id|",
+    "u3740/s3740 change-deletion #3741 |  azure_blob_storage_stage:|",
+    "u3741/s3741 change-deletion #3742 |    storage_account: oailodestoneprod|",
+    "u3742/s3742 change-deletion #3743 |    container: notifications|",
+    "u3743/s3743 change-deletion #3744 |  rockset_sink:|",
+    "u3744/s3744 change-deletion #3745 |    workspace: campaigns|",
+    "u3745/s3745 change-deletion #3746 |    collection_alias: codex_2025_holiday|",
+    "u3746/s3746 change-deletion #3747 |    deployments:|",
+    "u3747/s3747 change-deletion #3748 |      - deployment_rrn: rrn:rsd:rs6:c74bab26-bcfd-4e9b-82f8-1417bea02b8d|",
+    "u3748/s3748 change-deletion #3749 |        assumed_role_rrn: rrn:role:rs6:68fb7059-b1d7-46f6-bd4e-0d11088735f9|",
+    "u3749/s3749 change-deletion #3750 |    shard_count_minimum: 4|",
+    "u3750/s3750 change-deletion #3751 |  owner: growth|",
+  ],
+}
+`;

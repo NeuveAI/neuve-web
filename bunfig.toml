@@ -1,0 +1,7 @@
+[install]
+# The global ~/.bunfig.toml enforces a 10-day minimumReleaseAge.
+# Manually approved exceptions (user-approved 2026-10-03):
+#   effect — v4.0.0 (published 2026-10-01) is required for the Effect backend.
+minimumReleaseAgeExcludes = ["effect", "eve", "@agentclientprotocol/sdk"]
+
+# User-approved 2026-10-03: current EVE and ACP releases for harness integration.

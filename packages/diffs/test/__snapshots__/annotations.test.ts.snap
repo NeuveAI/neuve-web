@@ -1,0 +1,73 @@
+// Bun Snapshot v1, https://bun.sh/docs/test/snapshots
+
+exports[`Annotation Rendering line index matching annotation lineIndex matches preceding line in unified style: unified annotation placement 1`] = `
+[
+  {
+    "annotationIndex": "0,7",
+    "lineIndex": "7,7",
+    "slotNames": [
+      "annotation-additions-8",
+    ],
+  },
+  {
+    "annotationIndex": "1,29",
+    "lineIndex": "29,29",
+    "slotNames": [
+      "annotation-additions-30",
+    ],
+  },
+  {
+    "annotationIndex": "1,32",
+    "lineIndex": "32,32",
+    "slotNames": [
+      "annotation-deletions-25",
+    ],
+  },
+]
+`;
+
+exports[`Annotation Rendering line index matching annotation lineIndex matches preceding line in split style: split additions annotation placement 1`] = `
+[
+  {
+    "annotationIndex": "0,7",
+    "lineIndex": "7,7",
+    "slotNames": [
+      "annotation-additions-8",
+    ],
+  },
+  {
+    "annotationIndex": "1,29",
+    "lineIndex": "29,29",
+    "slotNames": [
+      "annotation-additions-30",
+    ],
+  },
+  {
+    "annotationIndex": "1,32",
+    "lineIndex": "32,32",
+    "slotNames": [],
+  },
+]
+`;
+
+exports[`Annotation Rendering line index matching annotation lineIndex matches preceding line in split style: split deletions annotation placement 1`] = `
+[
+  {
+    "annotationIndex": "0,7",
+    "lineIndex": "6,6",
+    "slotNames": [],
+  },
+  {
+    "annotationIndex": "1,29",
+    "lineIndex": "29,29",
+    "slotNames": [],
+  },
+  {
+    "annotationIndex": "1,32",
+    "lineIndex": "32,32",
+    "slotNames": [
+      "annotation-deletions-25",
+    ],
+  },
+]
+`;
