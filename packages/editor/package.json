@@ -1,0 +1,19 @@
+{
+  "name": "@workspace/editor",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@agentclientprotocol/sdk": "1.7.0",
+    "effect": "4.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22",
+    "typescript": "^6.0.2"
+  }
+}
