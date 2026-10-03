@@ -7,9 +7,12 @@ import type { ReviewLane } from "@workspace/ui/neuve/types"
  */
 export function LaneGlyph({
   lane,
+  outline = false,
   className,
 }: {
   lane: ReviewLane
+  /** Human-required only: an outlined diamond (a unit not selected). */
+  outline?: boolean
   className?: string
 }) {
   return (
@@ -20,9 +23,17 @@ export function LaneGlyph({
       aria-hidden="true"
       className={className}
     >
-      {lane === "human-required" && (
-        <path d="M5 .8 9.2 5 5 9.2 .8 5z" fill="var(--nv-req)" />
-      )}
+      {lane === "human-required" &&
+        (outline ? (
+          <path
+            d="M5 .8 9.2 5 5 9.2 .8 5z"
+            fill="none"
+            stroke="var(--nv-req)"
+            strokeWidth="1.4"
+          />
+        ) : (
+          <path d="M5 .8 9.2 5 5 9.2 .8 5z" fill="var(--nv-req)" />
+        ))}
       {lane === "human-suggested" && (
         <>
           <path

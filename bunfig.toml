@@ -5,3 +5,9 @@
 minimumReleaseAgeExcludes = ["effect", "eve", "@agentclientprotocol/sdk"]
 
 # User-approved 2026-10-03: current EVE and ACP releases for harness integration.
+
+[run]
+# Bun only: run package bins (vite, storybook, tsc, …) on the Bun runtime even when
+# they declare a node shebang. Needed for bun:sqlite in the BFF's SSR, and the project
+# rule is "use bun exclusively".
+bun = true

@@ -18,7 +18,11 @@ import {
 } from "@workspace/ui/lib/diffs"
 import type { DiffVariant } from "@workspace/ui/lib/diffs"
 import { cn } from "@workspace/ui/lib/utils"
-import { diffVirtualizerAtom } from "@workspace/ui/neuve/review-desk/atoms"
+import {
+  diffVirtualizerAtom,
+  effectiveLayoutAtom,
+  wrapAtom,
+} from "@workspace/ui/neuve/review-desk/atoms"
 import type { LineRange } from "@workspace/ui/neuve/types"
 
 declare module "react" {
@@ -102,6 +106,11 @@ export function DiffSurface({
   children,
 }: DiffSurfaceProps) {
   const virtualizer = useAtomValue(diffVirtualizerAtom)
+  const commentable = onSelectLines !== undefined
+  // Stacked/Split and Wrap are Pierre's own diffStyle and overflow options;
+  // a change rebuilds the renderer (the ref callback below depends on them).
+  const layout = useAtomValue(effectiveLayoutAtom)
+  const wrap = useAtomValue(wrapAtom)
   const instanceRef = React.useRef<Instance | null>(null)
   const hostRef = React.useRef<HTMLElement | null>(null)
   // Latest callbacks for the vanilla instance (assigned after commit).
@@ -113,6 +122,9 @@ export function DiffSurface({
       // a renderer that would be replaced one commit later.
       if (host === null || virtualizer === "pending") return
       ensureNeuveDiffTheme()
+      // Any surface that takes comments (a unit's file or a read-only
+      // neighbor) makes its gutter the comment surface.
+      const onSelectLinesPresent = commentable
       const select = (range: SelectedLineRange | null) =>
         callbacks.current.onSelectLines?.(toLineRange(range))
       const commit = (range: SelectedLineRange) => {
@@ -120,8 +132,8 @@ export function DiffSurface({
         if (next) callbacks.current.onCommitLines?.(next)
       }
       const options: FileDiffOptions<undefined, undefined> = {
-        ...diffOptions(variant),
-        ...(variant === "review"
+        ...diffOptions(variant, { layout, wrap }),
+        ...(onSelectLinesPresent
           ? {
               // Pierre's line selection, extended in the fork with keyboard
               // and touch: the gutter is the comment surface.
@@ -149,6 +161,8 @@ export function DiffSurface({
         : new FileDiff(options, pool, true)
       // Exposed for stories and tests (which renderer is mounted).
       host.dataset.virtualized = virtualizer ? "true" : "false"
+      host.dataset.layout = layout
+      host.dataset.wrap = wrap ? "true" : "false"
       hostRef.current = host
       instanceRef.current = instance
       return () => {
@@ -160,7 +174,7 @@ export function DiffSurface({
         hostRef.current = null
       }
     },
-    [virtualizer, variant]
+    [virtualizer, variant, layout, wrap, commentable]
   )
 
   const {

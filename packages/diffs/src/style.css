@@ -1913,6 +1913,32 @@
     z-index: var(--diffs-overlay-expanded-z, 12);
   }
 
+  /* NEUVE FORK: the expanded item runs from its anchor to the host bottom,
+   * so a host can make its card sticky (it stays visible while the file
+   * scrolls) and cap it at the viewport. The stretched area itself takes no
+   * pointer events; only the slotted content does. */
+  [data-overlay-item][data-expanded] {
+    bottom: var(--diffs-overlay-item-top, auto);
+    pointer-events: none;
+  }
+
+  [data-overlay-item][data-expanded] [data-overlay-pins] {
+    pointer-events: auto;
+  }
+
+  [data-overlay-item][data-expanded] [data-overlay-bodies] {
+    flex: 1 1 auto;
+    min-height: 0;
+  }
+
+  [data-overlay-item][data-expanded] [data-overlay-body][data-expanded] {
+    flex: 1 1 auto;
+  }
+
+  [data-overlay-item][data-expanded] ::slotted(*) {
+    pointer-events: auto;
+  }
+
   /* Isolation: one expanded item; everything else dims and stops responding. */
   [data-annotation-overlay][data-has-expanded]
     [data-overlay-item]:not([data-expanded]) {

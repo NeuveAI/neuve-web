@@ -7,8 +7,8 @@
     "lint": "eslint",
     "format": "prettier --write \"**/*.{ts,tsx}\"",
     "typecheck": "tsc --noEmit",
-    "storybook": "storybook dev -p 6006 --no-open",
-    "build-storybook": "storybook build"
+    "storybook": "bun --bun x storybook dev -p 6006 --no-open",
+    "build-storybook": "bun --bun x storybook build"
   },
   "dependencies": {
     "@fontsource-variable/geist": "^5.3.0",

@@ -5,6 +5,15 @@ import type { NeuveLinkProps } from "@workspace/ui/neuve/shared/nav-link"
 /** Adapts UI-package destinations onto typed TanStack Router links. */
 export function RouterLink({ destination, ...props }: NeuveLinkProps) {
   if (destination.to === "overview") return <Link to="/" {...props} />
+  if (destination.to === "changes") {
+    return (
+      <Link
+        to="/changes/$commit"
+        params={{ commit: destination.commit }}
+        {...props}
+      />
+    )
+  }
   return (
     <Link
       to="/review/$unitId"

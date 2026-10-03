@@ -8,7 +8,10 @@ import * as React from "react"
  * anchor fallback below.
  */
 export type NeuveDestination =
-  { to: "overview" } | { to: "unit"; unitId: string }
+  | { to: "overview" }
+  | { to: "unit"; unitId: string }
+  /** What a new commit asks of the reviewer (commit lineage). */
+  | { to: "changes"; commit: string }
 
 export type NeuveLinkProps = Omit<
   React.ComponentPropsWithoutRef<"a">,
@@ -20,7 +23,14 @@ export type NeuveLinkProps = Omit<
 export type NeuveLinkComponent = React.ComponentType<NeuveLinkProps>
 
 export function destinationHref(destination: NeuveDestination) {
-  return destination.to === "overview" ? "/" : `/review/${destination.unitId}`
+  switch (destination.to) {
+    case "overview":
+      return "/"
+    case "unit":
+      return `/review/${destination.unitId}`
+    case "changes":
+      return `/changes/${destination.commit}`
+  }
 }
 
 function AnchorLink({ destination, ...props }: NeuveLinkProps) {

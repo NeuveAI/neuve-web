@@ -57,7 +57,7 @@ export const DIFF_METRICS: Partial<VirtualFileMetrics> = {
  * Only geometry and typography that brand variables cannot reach.
  */
 const SURFACE_CSS = `
-:host { --diffs-gap-block: 0px; }
+:host { --diffs-gap-block: 0px; --diffs-overlay-width: 300px; }
 /* Pierre mixes the diff colours into the row background (80–91%); the brand
    tokens are already the final colours, so use them unmixed. */
 [data-line], [data-no-newline], [data-gutter-buffer], [data-column-number] {
@@ -90,7 +90,27 @@ pre { border-radius: 0 0 10px 10px; overflow: hidden; }
   [data-utility-button]:active { transform: none; }
 }
 [data-overlay-hint] { width: 232px; }
-@media (max-width: 1180px) { :host { --diffs-overlay-width: 220px; } }
+/* An open comment thread can run past a short file: keep it above the next
+   file's margin items instead of under them. */
+[data-overlay-item]:has([data-overlay-body]:not([data-dismissed], [data-empty])) {
+  z-index: 3;
+}
+/* +/− live in the gutter, which Pierre pins while a file scrolls sideways
+   (Wrap off), so the sign never scrolls away from its line number. */
+[data-indicators='classic'] [data-line]::before { content: none; }
+[data-indicators='classic'] [data-line] { padding-inline-start: 1ch; }
+[data-indicators='classic'] [data-column-number] { padding-inline-end: 2.2ch; }
+[data-indicators='classic'] [data-column-number]:is([data-line-type='change-addition'], [data-line-type='change-deletion'])::after {
+  position: absolute; top: 0; right: 0.6ch; width: 1ch; text-align: center;
+  user-select: none; pointer-events: none;
+}
+[data-indicators='classic'] [data-column-number][data-line-type='change-addition']::after {
+  content: '+'; color: var(--diffs-addition-base);
+}
+[data-indicators='classic'] [data-column-number][data-line-type='change-deletion']::after {
+  content: '−'; color: var(--diffs-deletion-base);
+}
+@media (max-width: 1180px) { :host { --diffs-overlay-width: 260px; } }
 @media (max-width: 860px) {
   [data-annotation-overlay] {
     inset-inline-start: auto;
@@ -102,19 +122,32 @@ pre { border-radius: 0 0 10px 10px; overflow: hidden; }
 
 export type DiffVariant = "review" | "read-only"
 
+export interface DiffPresentation {
+  /** Stacked (unified) or split (removed and added rows side by side). */
+  layout: "stacked" | "split"
+  /** Wrap long lines; off scrolls each file sideways, gutter pinned. */
+  wrap: boolean
+}
+
+export const DEFAULT_PRESENTATION: DiffPresentation = {
+  layout: "stacked",
+  wrap: true,
+}
+
 export function diffOptions(
-  variant: DiffVariant
+  variant: DiffVariant,
+  presentation: DiffPresentation = DEFAULT_PRESENTATION
 ): FileDiffOptions<undefined, undefined> {
   return {
     theme: NEUVE_DIFF_THEME,
     themeType: "light",
-    diffStyle: "unified",
+    diffStyle: presentation.layout === "split" ? "split" : "unified",
     // Classic +/− signs: the design bans coloured edge rails.
     diffIndicators: "classic",
-    hunkSeparators: variant === "review" ? "line-info" : "simple",
+    hunkSeparators: "line-info",
     disableFileHeader: true,
     annotationLayout: "overlay",
-    overflow: "scroll",
+    overflow: presentation.wrap ? "wrap" : "scroll",
     lineDiffType: variant === "review" ? "word-alt" : "none",
     expansionLineCount: 20,
     unsafeCSS: SURFACE_CSS,

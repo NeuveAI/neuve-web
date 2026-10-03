@@ -1,17 +1,17 @@
 import * as React from "react"
 import { useAtomValue, useSetAtom } from "jotai"
-import { AnimatePresence } from "motion/react"
+import { AnimatePresence, motion, useReducedMotion } from "motion/react"
 import { getOverlayBodySlotName, getOverlayPinSlotName } from "@workspace/diffs"
 import type { DiffLineAnnotation } from "@workspace/diffs"
 
 import { cn } from "@workspace/ui/lib/utils"
+import { EASE, REDUCED_TRANSITION, TIMING, ms } from "@workspace/ui/lib/motion"
 import {
   closeCardAtom,
   closingComposerAtom,
   commentDraftAtom,
   composerAtom,
   discardCommentAtom,
-  dismissMarkerAtom,
   escapeComposerAtom,
   hoverHintAtom,
   isolatingAtom,
@@ -23,11 +23,9 @@ import {
   parkedDraftsAtom,
   saveCommentAtom,
   selectLinesAtom,
-  toggleCommentBodyAtom,
   toggleMarkerAtom,
 } from "@workspace/ui/neuve/review-desk/atoms"
 import {
-  CommentBody,
   CommentComposer,
   ContextCard,
   DraftPin,
@@ -47,6 +45,12 @@ import {
   toFileDiff,
 } from "@workspace/ui/neuve/review-desk/diff-model"
 import { DiffSurface } from "@workspace/ui/neuve/review-desk/diff-surface"
+import {
+  CommentPreviewCard,
+  ThreadCard,
+} from "@workspace/ui/neuve/review-desk/thread-card"
+import { reviewThreadsAtom } from "@workspace/ui/neuve/review-comments/threads"
+import type { DiffVariant } from "@workspace/ui/lib/diffs"
 import { reviewCommentRepositoryAtom } from "@workspace/ui/neuve/review-comments/repository"
 import type {
   ReviewCommentAuthor,
@@ -57,18 +61,31 @@ import type {
   DiffFile,
   LineRange,
   MarkerAnchor,
+  MarkerCheckAction,
+  NeighborContextNote,
 } from "@workspace/ui/neuve/types"
 
 /** Overlay ids: the comment composer and the selection's commit chip. */
 export const COMPOSER_ID = "composer"
 export const SELECTION_ID = "selection"
 const draftId = (id: string) => `draft:${id}`
+const noteId = (key: string) => `note:${key}`
+
+/** A collapsed file's code rising in (read-only neighbor). */
+const RISE = {
+  offsetY: 8, // px the rows rise from
+  initialScale: 0.98,
+  enter: { duration: ms(TIMING.dockRise), ease: EASE.emphasizedDecelerate },
+  exit: { duration: ms(TIMING.dockExit), ease: EASE.emphasizedAccelerate },
+} as const
 
 /** Who is writing and against which unit and revision. */
 export interface CommentContext {
   unitId: string
   revision: string
   author: ReviewCommentAuthor
+  /** The unit's agent: new comments open a thread with it. */
+  agentId?: string
 }
 
 function basename(path: string): string {
@@ -92,6 +109,13 @@ export function DiffFileCard({
   commentAnchors = [],
   comments = {},
   commentContext,
+  variant = "review",
+  contextNotes = [],
+  header,
+  footer,
+  collapsed = false,
+  surfaceId,
+  onCheckAction,
 }: {
   file: DiffFile
   markers: Record<string, ContextualMarker>
@@ -100,6 +124,20 @@ export function DiffFileCard({
   /** Records behind those markers, by marker key (status, actions). */
   comments?: Record<string, ReviewCommentRecord>
   commentContext: CommentContext
+  /** `read-only`: a read-only neighbor (muted, its own unit's comments). */
+  variant?: DiffVariant
+  /** A read-only neighbor's own context: muted pins with their note. */
+  contextNotes?: ReadonlyArray<NeighborContextNote>
+  /** Replaces the file header (the read-only neighbor brings its own). */
+  header?: React.ReactNode
+  /** Under the code (the read-only neighbor's "you can comment" note). */
+  footer?: React.ReactNode
+  /** Header only; the code rises in when expanded (read-only neighbor). */
+  collapsed?: boolean
+  /** Id of the code region, for the header's aria-controls. */
+  surfaceId?: string
+  /** The "Before you decide" action of an open card. */
+  onCheckAction?: (marker: ContextualMarker, action: MarkerCheckAction) => void
 }) {
   const open = useAtomValue(openMarkerAtom)
   const composer = useAtomValue(composerAtom)
@@ -113,8 +151,6 @@ export function DiffFileCard({
   const isolating = useAtomValue(isolatingAtom)
   const setHint = useSetAtom(hoverHintAtom)
   const toggleMarker = useSetAtom(toggleMarkerAtom)
-  const toggleComment = useSetAtom(toggleCommentBodyAtom)
-  const dismissMarker = useSetAtom(dismissMarkerAtom)
   const closeCard = useSetAtom(closeCardAtom)
   const openSheet = useSetAtom(openSheetAtom)
   const openComposer = useSetAtom(openComposerAtom)
@@ -125,6 +161,9 @@ export function DiffFileCard({
   const saveComment = useSetAtom(saveCommentAtom)
   const repository = useAtomValue(reviewCommentRepositoryAtom)
   const setStatus = useSetAtom(repository.setStatusAtom)
+  const threads = useAtomValue(reviewThreadsAtom)
+  const readOnly = variant === "read-only"
+  const reduce = useReducedMotion()
 
   const fileDiff = toFileDiff(file, commentContext.revision)
   const rows = displayRows(fileDiff, file)
@@ -148,6 +187,13 @@ export function DiffFileCard({
       side: anchor.side,
       lineNumber: anchor.lineNumber,
     }))
+    for (const note of contextNotes) {
+      list.push({
+        id: noteId(note.key),
+        side: note.side,
+        lineNumber: note.lineNumber,
+      })
+    }
     for (const d of drafts) {
       list.push({
         id: draftId(d.id),
@@ -172,7 +218,7 @@ export function DiffFileCard({
       })
     }
     return list
-  }, [anchors, drafts, composerSlot, composing, selected])
+  }, [anchors, contextNotes, drafts, composerSlot, composing, selected])
 
   const openHere =
     open !== null && anchors.some((a) => a.markerKey === open)
@@ -185,10 +231,13 @@ export function DiffFileCard({
     anchors.find((anchor) => anchor.markerKey === key)?.range
   const hintRange =
     hint?.filePath === file.path ? rangeOf(hint.markerKey) : undefined
-  const openRange = [...openBodies]
-    .reverse()
-    .map((key) => rangeOf(key))
-    .find((range) => range !== undefined)
+  // The open thread's lines first; otherwise the latest shown preview's.
+  const openRange =
+    (openHere ? rangeOf(openHere) : undefined) ??
+    [...openBodies]
+      .reverse()
+      .map((key) => rangeOf(key))
+      .find((range) => range !== undefined)
   const highlight: { range: LineRange; tone: "strong" | "hint" } | undefined =
     composing
       ? undefined
@@ -202,10 +251,15 @@ export function DiffFileCard({
     // The L2 card stays expanded under an L3 sheet ("Back to unit" returns
     // to it); the composer is the expanded layer while it is open.
     expandedId: composing ? COMPOSER_ID : openHere,
-    // Review-comment bodies are collapsed to their pin unless opened.
+    // A card or a thread shows only while it is the expanded layer; a
+    // comment's compact preview also shows while "Show comments" is on.
     dismissedIds: anchors
       .map((anchor) => anchor.markerKey)
-      .filter((key) => !openBodies.includes(key)),
+      .filter((key) =>
+        markers[key]?.sourceKind === "review comment"
+          ? key !== openHere && !openBodies.includes(key)
+          : key !== openHere
+      ),
     // Isolation spans files: a layer expanded in another file dims this one.
     isolated: isolating && !composing && !openHere,
     hintId:
@@ -270,176 +324,269 @@ export function DiffFileCard({
     // gutter stays live (dragging re-targets the comment); everywhere else an
     // outside click still closes the composer.
     <div className={cn("flex items-start gap-4", composing && "relative z-12")}>
-      <div className="min-w-0 flex-auto rounded-[10px] bg-surface shadow-[0_0_0_1px_var(--nv-line)]">
-        <div className="box-border flex h-11 items-center gap-2.5 border-b border-line-2 px-3.5">
-          <span className="min-w-0 truncate font-mono text-[12.5px]">
-            {file.path}
-          </span>
-          <span className="font-mono text-[11.5px] text-add-fg">
-            +{file.additions}
-          </span>
-          <span className="font-mono text-[11.5px] text-del-fg">
-            −{file.deletions}
-          </span>
-        </div>
-        <DiffSurface
-          label={`Changes in ${file.path}. Line numbers select lines to comment on.`}
-          fileDiff={fileDiff}
-          annotations={annotations}
-          overlay={overlay}
-          selection={composing ? composing.range : selected}
-          onSelectLines={onSelectLines}
-          onCommitLines={onCommitLines}
-        >
-          {anchors.map((anchor) => {
-            const marker = markers[anchor.markerKey]
-            if (!marker) return null
-            const isComment = marker.sourceKind === "review comment"
-            const bodyOpen = openBodies.includes(marker.key)
-            const record = comments[marker.key]
-            const cardOpen = !isComment && open === marker.key
-            return (
-              <React.Fragment key={marker.key}>
+      <div
+        className={cn(
+          "min-w-0 flex-auto rounded-[10px]",
+          readOnly ? "bg-ro-bg" : "bg-surface shadow-[0_0_0_1px_var(--nv-line)]"
+        )}
+      >
+        {header ?? (
+          <div className="box-border flex h-11 items-center gap-2.5 border-b border-line-2 px-3.5">
+            <span className="min-w-0 truncate font-mono text-[12.5px]">
+              {file.path}
+            </span>
+            <span className="font-mono text-[11.5px] text-add-fg">
+              +{file.additions}
+            </span>
+            <span className="font-mono text-[11.5px] text-del-fg">
+              −{file.deletions}
+            </span>
+          </div>
+        )}
+        <AnimatePresence initial={false}>
+          {!collapsed && (
+            <motion.div
+              key="surface"
+              id={surfaceId}
+              initial={
+                reduce
+                  ? { opacity: 0 }
+                  : { opacity: 0, y: RISE.offsetY, scale: RISE.initialScale }
+              }
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{
+                opacity: 0,
+                transition: reduce ? REDUCED_TRANSITION : RISE.exit,
+              }}
+              transition={reduce ? REDUCED_TRANSITION : RISE.enter}
+              style={{ transformOrigin: "bottom center" }}
+            >
+              <DiffSurface
+                variant={variant}
+                label={
+                  readOnly
+                    ? `Read-only neighbor ${file.path}. Line numbers select lines to comment on.`
+                    : `Changes in ${file.path}. Line numbers select lines to comment on.`
+                }
+                fileDiff={fileDiff}
+                annotations={annotations}
+                overlay={overlay}
+                selection={composing ? composing.range : selected}
+                onSelectLines={onSelectLines}
+                onCommitLines={onCommitLines}
+              >
+                {anchors.map((anchor) => {
+                  const marker = markers[anchor.markerKey]
+                  if (!marker) return null
+                  const isComment = marker.sourceKind === "review comment"
+                  const record = comments[marker.key]
+                  const expanded = open === marker.key
+                  const cardOpen = !isComment && expanded
+                  const threadOpen = isComment && expanded
+                  const previewShown =
+                    isComment && !expanded && openBodies.includes(marker.key)
+                  return (
+                    <React.Fragment key={marker.key}>
+                      <div
+                        slot={getOverlayPinSlotName(marker.key)}
+                        className="contents"
+                      >
+                        <MarginPin
+                          marker={marker}
+                          rangeLabel={
+                            anchor.range ? rangeLabel(anchor.range) : undefined
+                          }
+                          on={expanded}
+                          readOnly={readOnly && !isComment}
+                          className={
+                            record?.status === "resolved"
+                              ? "opacity-55"
+                              : undefined
+                          }
+                          disabled={
+                            isolating && overlay.expandedId !== marker.key
+                          }
+                          data-anchor={anchorKey(
+                            anchor.side,
+                            anchor.lineNumber
+                          )}
+                          data-marker-key={marker.key}
+                          onToggle={() => toggleMarker(marker.key)}
+                          onHintStart={() =>
+                            setHint({
+                              filePath: file.path,
+                              markerKey: marker.key,
+                            })
+                          }
+                          onHintEnd={() =>
+                            setHint((current) =>
+                              current?.markerKey === marker.key ? null : current
+                            )
+                          }
+                        />
+                      </div>
+                      <div
+                        slot={getOverlayBodySlotName(marker.key)}
+                        className="contents"
+                      >
+                        <AnimatePresence initial={false}>
+                          {previewShown && record && (
+                            <CommentPreviewCard
+                              key="preview"
+                              record={record}
+                              rangeLabel={
+                                anchor.range
+                                  ? rangeLabel(anchor.range)
+                                  : `L${anchor.lineNumber}`
+                              }
+                              thread={threads[record.id]}
+                              onOpen={() => toggleMarker(marker.key)}
+                            />
+                          )}
+                          {threadOpen && record && (
+                            <ThreadCard
+                              key="thread"
+                              record={record}
+                              rangeLabel={
+                                anchor.range
+                                  ? rangeLabel(anchor.range)
+                                  : `L${anchor.lineNumber}`
+                              }
+                              thread={threads[record.id]}
+                              fallbackAgentId={commentContext.agentId}
+                              reviewer={commentContext.author}
+                              onDismiss={() => {
+                                closeCard()
+                                // Keep keyboard users where they were: on the pin
+                                // the thread collapsed back into.
+                                document
+                                  .querySelector<HTMLElement>(
+                                    `button[data-marker-key="${CSS.escape(marker.key)}"]`
+                                  )
+                                  ?.focus()
+                              }}
+                              onToggleStatus={() =>
+                                setStatus(
+                                  record.id,
+                                  record.status === "open" ? "resolved" : "open"
+                                )
+                              }
+                            />
+                          )}
+                          {cardOpen && (
+                            <ContextCard
+                              key="card"
+                              marker={marker}
+                              onClose={closeCard}
+                              onOpenSource={openSheet}
+                              onCheckAction={(action) =>
+                                onCheckAction?.(marker, action)
+                              }
+                            />
+                          )}
+                        </AnimatePresence>
+                      </div>
+                    </React.Fragment>
+                  )
+                })}
+                {contextNotes.map((note) => (
+                  <React.Fragment key={note.key}>
+                    <div
+                      slot={getOverlayPinSlotName(noteId(note.key))}
+                      className="contents"
+                    >
+                      <span
+                        aria-label={`${note.short}: ${note.note}`}
+                        className="inline-flex h-[22px] items-center gap-1.5 rounded-md px-2 font-mono text-[11px] text-ink-muted shadow-[inset_0_0_0_1px_var(--nv-line)]"
+                      >
+                        <span
+                          aria-hidden="true"
+                          className="size-1.5 rounded-[2px] bg-faint"
+                        />
+                        {note.short}
+                      </span>
+                    </div>
+                    <div
+                      slot={getOverlayBodySlotName(noteId(note.key))}
+                      className="block"
+                    >
+                      <span className="block max-w-[230px] text-[11.5px] leading-4 text-ink-muted">
+                        {note.note}
+                      </span>
+                    </div>
+                  </React.Fragment>
+                ))}
+                {drafts.map((d) => (
+                  <div
+                    key={d.id}
+                    slot={getOverlayPinSlotName(draftId(d.id))}
+                    className="contents"
+                  >
+                    <DraftPin
+                      label={rangeLabel(d.range)}
+                      excerpt={d.text}
+                      disabled={isolating}
+                      onOpen={() =>
+                        openComposer({ filePath: file.path, range: d.range })
+                      }
+                    />
+                  </div>
+                ))}
                 <div
-                  slot={getOverlayPinSlotName(marker.key)}
+                  slot={getOverlayPinSlotName(SELECTION_ID)}
                   className="contents"
                 >
-                  <MarginPin
-                    marker={marker}
-                    rangeLabel={
-                      anchor.range ? rangeLabel(anchor.range) : undefined
-                    }
-                    on={isComment ? bodyOpen : cardOpen}
-                    className={
-                      record?.status === "resolved"
-                        ? "opacity-55"
-                        : undefined
-                    }
-                    disabled={isolating && overlay.expandedId !== marker.key}
-                    data-anchor={anchorKey(anchor.side, anchor.lineNumber)}
-                    data-marker-key={marker.key}
-                    onToggle={() =>
-                      isComment
-                        ? toggleComment(marker.key)
-                        : toggleMarker(marker.key)
-                    }
-                    onHintStart={() =>
-                      setHint({ filePath: file.path, markerKey: marker.key })
-                    }
-                    onHintEnd={() =>
-                      setHint((current) =>
-                        current?.markerKey === marker.key ? null : current
-                      )
-                    }
-                  />
-                </div>
-                <div
-                  slot={
-                    isComment
-                      ? getOverlayBodySlotName(marker.key)
-                      : getOverlayPinSlotName(marker.key)
-                  }
-                  className={
-                    isComment ? "block" : "absolute top-[30px] left-0 z-1"
-                  }
-                >
-                  <AnimatePresence initial={false}>
-                    {isComment && bodyOpen && (
-                      <CommentBody
-                        key="body"
-                        marker={marker}
-                        status={record?.status ?? "open"}
-                        onDismiss={() => {
-                          dismissMarker(marker.key)
-                          // Keep keyboard users where they were: on the pin
-                          // the body collapsed back into.
-                          document
-                            .querySelector<HTMLElement>(
-                              `button[data-marker-key="${CSS.escape(marker.key)}"]`
-                            )
-                            ?.focus()
-                        }}
-                        onToggleStatus={() =>
-                          record &&
-                          setStatus(
-                            record.id,
-                            record.status === "open" ? "resolved" : "open"
-                          )
+                  <AnimatePresence>
+                    {selected && (
+                      <SelectionChip
+                        key="chip"
+                        label={rangeLabel(selected)}
+                        onOpen={() =>
+                          openComposer({ filePath: file.path, range: selected })
                         }
-                      />
-                    )}
-                    {cardOpen && (
-                      <ContextCard
-                        key="card"
-                        marker={marker}
-                        onClose={closeCard}
-                        onOpenSource={openSheet}
                       />
                     )}
                   </AnimatePresence>
                 </div>
-              </React.Fragment>
-            )
-          })}
-          {drafts.map((d) => (
-            <div
-              key={d.id}
-              slot={getOverlayPinSlotName(draftId(d.id))}
-              className="contents"
-            >
-              <DraftPin
-                label={rangeLabel(d.range)}
-                excerpt={d.text}
-                disabled={isolating}
-                onOpen={() =>
-                  openComposer({ filePath: file.path, range: d.range })
-                }
-              />
-            </div>
-          ))}
-          <div slot={getOverlayPinSlotName(SELECTION_ID)} className="contents">
-            <AnimatePresence>
-              {selected && (
-                <SelectionChip
-                  key="chip"
-                  label={rangeLabel(selected)}
-                  onOpen={() =>
-                    openComposer({ filePath: file.path, range: selected })
-                  }
-                />
-              )}
-            </AnimatePresence>
-          </div>
-          <div slot={getOverlayBodySlotName(COMPOSER_ID)} className="block">
-            <AnimatePresence onExitComplete={() => setClosingComposer(null)}>
-              {composing && (
-                <CommentComposer
-                  key="composer"
-                  anchorLabel={`${basename(file.path)} · ${rangePhrase(composing.range)}`}
-                  placeholder={`Comment on ${rangePhrase(composing.range)}`}
-                  draft={draft}
-                  onDraft={setDraft}
-                  onSave={save}
-                  onCancel={discardComment}
-                  onEscape={escapeComposer}
-                />
-              )}
-            </AnimatePresence>
-          </div>
-          {hintMarker && (
-            <div slot="overlay-hint" className="block">
-              <HintBubble
-                key={hintMarker.key}
-                text={hintMarker.peek}
-                comment={commentPreview(hintMarker, hintRange)}
-              />
-            </div>
+                <div
+                  slot={getOverlayBodySlotName(COMPOSER_ID)}
+                  className="block"
+                >
+                  <AnimatePresence
+                    onExitComplete={() => setClosingComposer(null)}
+                  >
+                    {composing && (
+                      <CommentComposer
+                        key="composer"
+                        anchorLabel={`${basename(file.path)} · ${rangePhrase(composing.range)}`}
+                        placeholder={`Comment on ${rangePhrase(composing.range)}`}
+                        draft={draft}
+                        onDraft={setDraft}
+                        onSave={save}
+                        onCancel={discardComment}
+                        onEscape={escapeComposer}
+                      />
+                    )}
+                  </AnimatePresence>
+                </div>
+                {hintMarker && (
+                  <div slot="overlay-hint" className="block">
+                    <HintBubble
+                      key={hintMarker.key}
+                      text={hintMarker.peek}
+                      comment={commentPreview(hintMarker, hintRange)}
+                    />
+                  </div>
+                )}
+              </DiffSurface>
+              {footer}
+            </motion.div>
           )}
-        </DiffSurface>
+        </AnimatePresence>
       </div>
       <div
         aria-hidden="true"
-        className="shrink-0 grow-0 basis-[268px] self-stretch max-[1180px]:basis-[220px] max-[860px]:hidden"
+        className="shrink-0 grow-0 basis-[300px] self-stretch max-[1180px]:basis-[260px] max-[860px]:hidden"
       />
     </div>
   )

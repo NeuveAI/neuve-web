@@ -50,8 +50,8 @@ function diffRoot(canvas: HTMLElement, index = 0) {
 }
 
 /**
- * Layer open: two review comments are open beside their lines and the
- * conflict card is the one expanded layer — on its own anchor row, every
+ * Layer open: two review comments show as compact previews ("Show
+ * comments") and the conflict card is the one expanded layer — on its own anchor row, every
  * other item (in every file) dimmed and inert, the row ringed. An outside
  * click (the dismiss layer) or Escape collapses it; nothing else moves.
  */
@@ -65,18 +65,18 @@ export const LayerOpen: Story = {
 }
 
 /**
- * Dismissed: the session comment was dismissed and is back to its pin (L0);
- * its pin (click, Enter or Space) reopens it. The earlier-revision comment
- * on +21 stays open.
+ * Dismissed: the session comment is back to its pin (L0); its pin (click,
+ * Enter or Space) opens its thread. The earlier-revision comment on +21
+ * shows as a compact preview.
  */
 export const LayerDismissed: Story = {
   args: { initialState: { openBodies: [EARLIER_COMMENT] } },
 }
 
 /**
- * Dismiss all: the play opens every comment and the conflict card, then uses
- * "Dismiss all" — every body collapses to its pin and the card closes.
- * "Show comments" brings the bodies back.
+ * Dismiss all: every comment preview is shown and the conflict card is open;
+ * the play uses "Dismiss all" — previews collapse to their pins and the card
+ * closes. "Show comments" brings the previews back.
  */
 export const DismissAll: Story = {
   args: {
@@ -356,7 +356,7 @@ export const SavedRangeComment: Story = {
       reviewCommentFixtures[0]!,
       crossSideCommentFixture,
     ]),
-    initialState: { openBodies: [SESSIONS_COMMENT] },
+    initialState: { openMarker: SESSIONS_COMMENT },
   },
   play: async ({ canvasElement }) => {
     await waitFor(
@@ -397,7 +397,7 @@ export const SavedCommentAsMarker: Story = {
     initialState: {
       dock: "composing",
       attachment: SESSIONS_COMMENT,
-      openBodies: [SESSIONS_COMMENT],
+      openMarker: SESSIONS_COMMENT,
     },
   },
 }
@@ -489,9 +489,7 @@ export const ResolvedHidden: Story = {
     await expect(toggle).toHaveAttribute("aria-pressed", "false")
     await userEvent.click(toggle)
     await canvas.findByRole("button", { name: /Hide resolved/ })
-    await userEvent.click(
-      canvas.getByRole("button", { name: /Hide resolved/ })
-    )
+    await userEvent.click(canvas.getByRole("button", { name: /Hide resolved/ }))
     await canvas.findByRole("button", { name: /1 resolved/ })
   },
 }

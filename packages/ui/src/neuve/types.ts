@@ -8,6 +8,8 @@
  * category. These are presentation shapes only — no backend contract yet.
  */
 
+import type { ReviewThread } from "./review-comments/thread"
+
 export type ReviewLane =
   "human-required" | "human-suggested" | "agentic-review" | "static-automation"
 
@@ -41,21 +43,97 @@ export interface ReviewCommentTrace {
   carriedForward: boolean
 }
 
-export type BadgeTone = "neutral" | "req" | "sug" | "batch"
+/* ── Context card (L2) ───────────────────────────────── */
 
-export interface SourceParagraph {
-  text: string
-  /** The cited fragment inside the whole source. */
-  cited: boolean
+/** One row of the graph read-by tree (`├`/`└` branches, file on the right). */
+export interface ReadByNode {
+  /** Tree prefix drawn in faint mono, e.g. "├ " or "│ └ ". */
+  prefix: string
+  name: string
+  /** Short file shown on the right, or "not traced". */
+  where: string
+  /** Full `path:line`, revealed in a tooltip when `where` is truncated. */
+  fullPath?: string
+  tone: "root" | "node" | "untraced"
 }
+
+/** The kind-specific excerpt of a context card. */
+export type MarkerExcerpt =
+  | { kind: "tree"; nodes: Array<ReadByNode> }
+  | {
+      kind: "versus"
+      a: { source: string; text: string }
+      b: { source: string; text: string }
+    }
+  | { kind: "code"; code: string }
+  | { kind: "quote"; text: string }
+
+/**
+ * The single action in a card's "Before you decide" callout. It does the
+ * check the sentence names: open a unit, open a file, ask the implementer,
+ * or request a check.
+ */
+export type MarkerCheckAction =
+  | { kind: "unit"; label: string; unitId: string }
+  | { kind: "file"; label: string; path: string }
+  | { kind: "ask"; label: string }
+  | { kind: "request-check"; label: string }
+
+/* ── Source sheet (L3) ─────────────────────────────────── */
+
+export type SourceTone = "neutral" | "outline" | "sug" | "req" | "agt"
+
+export type SourceAction =
+  | { kind: "editor"; editor: "VS Code" | "Cursor" | "Zed"; path: string }
+  | { kind: "copy-path"; path: string }
+  | { kind: "external"; label: string; href: string }
+  | { kind: "link"; label: string; href: string }
+
+export interface SourceFact {
+  label: string
+  value: string
+  /** Coloured only when the fact carries status. */
+  tone?: Exclude<SourceTone, "neutral" | "outline">
+  mono?: boolean
+}
+
+export interface SourceRow {
+  /** Leading mark: "1 hop", "◉", "!", a file glyph… */
+  mark: string
+  label: string
+  sub?: string
+  meta: string
+  tone?: Exclude<SourceTone, "neutral" | "outline">
+  /** Diff stat rows (`+6 −1`) colour each part. */
+  stat?: { additions?: number; deletions?: number }
+  /** Rows that can open in the editor (graph readers). */
+  openPath?: string
+}
+
+export type SourceBlock =
+  | {
+      kind: "code"
+      lines: Array<{ number: number; text: string; cited: boolean }>
+    }
+  | { kind: "quote"; text: string }
+  | { kind: "text"; text: string }
+  | { kind: "label"; text: string }
+  | { kind: "rows"; mono?: boolean; rows: Array<SourceRow> }
 
 /** L3 — the whole source, opened in the sheet. */
 export interface MarkerSource {
+  /** "Code", "Ticket", "History", "Graph", "Doc", "Test", "Comment". */
   kind: string
+  chips: Array<{ text: string; tone: SourceTone }>
   title: string
-  meta: string
-  paragraphs: Array<SourceParagraph>
-  citedBy: string
+  subtitle: string
+  actions: Array<SourceAction>
+  /** Two to four facts. */
+  facts: Array<SourceFact>
+  blocks: Array<SourceBlock>
+  citedBy: Array<string>
+  /** Present when the source belongs to another unit of the batch. */
+  goToUnit?: string
 }
 
 /** A contextual marker attributed to one diff line. */
@@ -70,18 +148,27 @@ export interface ContextualMarker {
   short: string
   /** One sentence to decide from (L1). */
   peek: string
-  /** L2 card. */
-  badge: string
-  badgeTone: BadgeTone
+  /**
+   * L2 header: one kind label that already carries status, e.g.
+   * "Same batch · unreviewed", "Decision signal", "Evidence gap".
+   */
+  kindLabel: string
   title: string
   meta: string
+  /** The cited text (a review comment's body). */
   quote: string
-  /** Second, opposing fragment (conflicting intent). */
-  quoteAgainst?: string
-  establishes: string
+  /** Kind-specific excerpt in the card body. */
+  excerpt?: MarkerExcerpt
+  /** "Why it's here": one line. */
   applies: string
-  uncertain: string
-  cited: string
+  /** "Before you decide": one plain sentence naming what to check. */
+  check?: string
+  checkAction?: MarkerCheckAction
+  /**
+   * Other review units of the batch that carry the same marker. Shown as
+   * dots on the pin and as linked units in the rail, never as a footnote.
+   */
+  sharedWith?: Array<string>
   source: MarkerSource
 }
 
@@ -125,12 +212,26 @@ export interface DiffFile {
   markerAnchors: Array<MarkerAnchor>
 }
 
+/** A muted context pin on a read-only neighbor, with its note shown. */
+export interface NeighborContextNote {
+  key: string
+  short: string
+  note: string
+  side: DiffSide
+  lineNumber: number
+}
+
 export interface ReadOnlyNeighbor {
   path: string
   /** Why it is read-only, e.g. its own lane and result. */
   note: string
-  /** The neighbor's hunk as a unified patch (partial file, not expandable). */
-  patch: string
+  /** The neighbor's own unit: comments on it go there, never to this unit. */
+  unitId: string
+  /** Its lane, in the "decision stays with …" note. */
+  laneLabel: string
+  file: DiffFile
+  /** Its own surrounding context, shown as muted pins when expanded. */
+  contextNotes: Array<NeighborContextNote>
 }
 
 export type BriefingSegment =
@@ -141,6 +242,8 @@ export interface RailUnit {
   id: string
   title: string
   hunkCount: number
+  /** The implementer that owns the unit (comments route to it). */
+  agentId?: string
 }
 
 export interface ElsewhereLane {
@@ -148,6 +251,123 @@ export interface ElsewhereLane {
   label: string
   count: number
   note?: string
+  /** The lane's units, listed when its rail group expands. */
+  units?: Array<LaneUnit>
+}
+
+/** A unit inside a rail lane group, with its result. */
+export interface LaneUnit {
+  id: string
+  title: string
+  /** "agent ✓", "changes", "passed". */
+  result: string
+  tone?: "req"
+}
+
+/** Any review unit of the batch, for linking shared markers to the rail. */
+export interface BatchUnit {
+  id: string
+  title: string
+  lane: ReviewLane
+}
+
+/* ── Agents on the branch (registry) ───────────────────── */
+
+/**
+ * Working labels, not vocabulary.md terms: "implementer" writes the change,
+ * "reviewer" reviews it. Neuve owns roles, scopes and routing; ACP carries
+ * none of them.
+ */
+export type AgentRole = "implementer" | "reviewer"
+
+/** An agent working on part of the branch. */
+export interface BranchAgent {
+  id: string
+  /** Avatar initials, e.g. "I1". */
+  short: string
+  /** e.g. "Implementer 1". */
+  name: string
+  role: AgentRole
+  /** The part of the branch it owns: a label and its paths. */
+  scope: { label: string; paths: Array<string> }
+  unitCount: number
+}
+
+/**
+ * A harness configured on the server that Connect may start. The browser
+ * picks one by id; it never supplies a command.
+ */
+export interface ConfiguredAgent {
+  id: string
+  label: string
+  roles: Array<AgentRole>
+}
+
+export type AgentConnection =
+  | { status: "connected"; harnessId: string; activity: string }
+  | { status: "connecting"; harnessId: string }
+  | { status: "disconnected" }
+
+export interface AgentRegistry {
+  agents: Array<BranchAgent>
+  configured: Array<ConfiguredAgent>
+  /** Initial connection status by agent id (live status lives in jotai). */
+  connections: Record<string, AgentConnection>
+}
+
+/* ── New commit mid-review (Cycle.dc.html) ─────────────── */
+
+/** A Neuve event sourced from Git: a new commit on the reviewed branch. */
+export interface NewCommitEvent {
+  commit: string
+  /** Review units of the new commit that need a human decision. */
+  needYou: number
+  /** The commit the reviewer is mid-review on. */
+  reviewing: string
+}
+
+export type LineageRelation = "renewed" | "corrected" | "regrouped" | "carried"
+
+export interface LineageEntry {
+  id: string
+  relation: LineageRelation
+  /** The units of the earlier commit, with their result. */
+  before: Array<{
+    title: string
+    result: string
+    tone: "approved" | "changes" | "agent"
+  }>
+  after: string
+  afterNote: string
+  needsYou: boolean
+  /** The reviewer's comment the change answers, if any. */
+  quote?: string
+  note?: string
+  /** Renewed signal: the unchanged hunk next to what changed under it. */
+  renewed?: {
+    approved: { file: string; note: string; line: number; text: string }
+    changed: {
+      file: string
+      note: string
+      line: number
+      removed: string
+      added: string
+    }
+    why: string
+    evidence: string
+  }
+  unitId?: string
+}
+
+export interface CommitLineage {
+  repo: string
+  branch: string
+  from: string
+  to: string
+  cycle: number
+  needYou: number
+  carried: number
+  entries: Array<LineageEntry>
 }
 
 /** The person reviewing; authors inline review comments. */
@@ -177,13 +397,46 @@ export interface ReviewDeskData {
     defaultAttachment: string
     draftSuggestion: string
     scopeNote: string
+    /** Owning implementer (comments and change requests route to it). */
+    agentId?: string
+    /**
+     * Units outside the human-required lane: who decided it and how. The
+     * reviewer can agree or request changes (suggested) or comment.
+     */
+    attribution?: UnitAttribution
   }
   railUnits: Array<RailUnit>
   elsewhere: Array<ElsewhereLane>
+  /** Every unit a shared marker can link to. */
+  batchUnits: Array<BatchUnit>
+  agents: AgentRegistry
   markers: Record<string, ContextualMarker>
   files: Array<DiffFile>
-  neighbor: ReadOnlyNeighbor
+  neighbor?: ReadOnlyNeighbor
   humanRequiredTotal: number
+  /** A new commit arrived while this revision is under review. */
+  newCommit?: NewCommitEvent
+  /** Comment threads with the agents (by comment record id). */
+  threads?: Array<ReviewThread>
+}
+
+/** How an agent or tool decided a unit outside the human-required lane. */
+export interface UnitAttribution {
+  /** "Agent approved", "Agent requested changes", "Passed static automation". */
+  headline: string
+  meta: string
+  summary?: string
+  outcome: "approved" | "changes-requested" | "passed"
+  evidence?: Array<string>
+  waiting?: string
+  checks?: Array<{
+    title: string
+    detail: string
+    meta: string
+    tone: "blocking" | "note" | "passed"
+  }>
+  /** Generated code, collapsed behind "Show generated diff". */
+  generatedDiff?: { label: string; file: DiffFile }
 }
 
 /* ── Batch overview ─────────────────────────────────────── */
@@ -205,6 +458,8 @@ export interface JudgmentUnit {
   unapproved?: number
   evidence: { text: string; tone: "gap" | "checked" }
   readers: number
+  /** Owning agent tag, e.g. I1. */
+  agentId?: string
 }
 
 export type VerificationCard =
@@ -252,4 +507,5 @@ export interface BatchOverviewData {
   judgment: Array<JudgmentUnit>
   verificationSummary: string
   verification: Array<VerificationCard>
+  agents: AgentRegistry
 }

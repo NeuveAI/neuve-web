@@ -14,7 +14,7 @@
 import * as React from "react"
 import { useAtomValue, useSetAtom } from "jotai"
 import { AnimatePresence, motion, useReducedMotion } from "motion/react"
-import { ChevronRightIcon, XIcon } from "lucide-react"
+import { ChevronRightIcon, MessageCircleIcon, XIcon } from "lucide-react"
 
 import { Button } from "@workspace/ui/components/button"
 import { Textarea } from "@workspace/ui/components/textarea"
@@ -22,8 +22,11 @@ import { EASE, REDUCED_TRANSITION, TIMING, ms } from "@workspace/ui/lib/motion"
 import { cn } from "@workspace/ui/lib/utils"
 import { LaneGlyph } from "@workspace/ui/neuve/shared/lane-glyph"
 import {
+  agreeAtom,
   approveAtom,
   attachmentAtom,
+  sendUnitCommentAtom,
+  startUnitCommentAtom,
   detachAtom,
   dockAtom,
   draftAtom,
@@ -220,10 +223,148 @@ function DockComposer({
   )
 }
 
+/** Rest for units outside the human-required lane (Lanes.dc.html). */
+function DockLaneRest({ unit }: { unit: ReviewDeskData["unit"] }) {
+  const startChanges = useSetAtom(startChangesAtom)
+  const startComment = useSetAtom(startUnitCommentAtom)
+  const agree = useSetAtom(agreeAtom)
+  const suggested = unit.lane === "human-suggested"
+  const text = suggested
+    ? "Agent approved this unit"
+    : unit.lane === "agentic-review"
+      ? "Decided by agentic review"
+      : "Passed static automation"
+  return (
+    <DockMotion key="rest" className={DOCK_BAR}>
+      <span className="inline-flex items-center gap-2 pr-2 text-[13px] text-dock-muted">
+        <LaneGlyph lane={unit.lane} />
+        {text}
+      </span>
+      {suggested ? (
+        <>
+          <Button
+            type="button"
+            variant="dock-ghost"
+            size="dock"
+            onClick={() => startChanges(unit.defaultAttachment)}
+          >
+            Request changes
+          </Button>
+          <Button
+            type="button"
+            variant="dock-primary"
+            size="dock"
+            onClick={agree}
+          >
+            Agree
+          </Button>
+        </>
+      ) : (
+        <Button
+          type="button"
+          variant="dock-ghost"
+          size="dock"
+          onClick={startComment}
+          className="shadow-[inset_0_0_0_1px_var(--nv-dock-line)]"
+        >
+          <MessageCircleIcon aria-hidden="true" data-icon="inline-start" />
+          Comment
+        </Button>
+      )}
+    </DockMotion>
+  )
+}
+
+/**
+ * Composer for units outside the human-required lane: Request changes on a
+ * suggested unit (overrides the agent's approval, goes to the implementer)
+ * or a Comment on an agentic or static unit (context for its next cycle).
+ */
+function DockLaneComposer({ unit }: { unit: ReviewDeskData["unit"] }) {
+  const draft = useAtomValue(draftAtom)
+  const setDraft = useSetAtom(draftAtom)
+  const cancel = useSetAtom(resetDockAtom)
+  const sendChanges = useSetAtom(sendChangesAtom)
+  const sendComment = useSetAtom(sendUnitCommentAtom)
+  const suggested = unit.lane === "human-suggested"
+  const title = suggested
+    ? "Request changes on this unit"
+    : "Comment on this unit"
+  return (
+    <DockMotion
+      key="composing"
+      role="dialog"
+      aria-label={title}
+      className="box-border flex w-[min(560px,calc(100vw-64px))] flex-col gap-2.5 rounded-[14px] bg-surface px-4 py-3.5 shadow-dock"
+    >
+      <span className="flex items-baseline gap-2">
+        <span className="text-sm font-semibold">{title}</span>
+        <span className="text-xs text-ink-muted">
+          {suggested
+            ? "Overrides the agent’s approval"
+            : "Adds context for this unit’s next cycle"}
+        </span>
+      </span>
+      <label htmlFor="dock-lane-comment" className="sr-only">
+        {suggested ? "What needs to change" : "Comment"}
+      </label>
+      <Textarea
+        id="dock-lane-comment"
+        rows={3}
+        value={draft}
+        onChange={(event) => setDraft(event.target.value)}
+        placeholder="What should the next cycle know?"
+        aria-keyshortcuts="Meta+Enter"
+        className="min-h-[68px] resize-none rounded-[10px] border-0 bg-raised px-3 py-2.5 text-[13.5px] leading-5 text-ink shadow-none focus-visible:ring-0 md:text-[13.5px] dark:bg-raised"
+      />
+      <span className="flex justify-end gap-2">
+        <Button
+          type="button"
+          variant="quiet"
+          size="dock"
+          className="h-[34px] px-3 font-normal"
+          onClick={cancel}
+        >
+          Cancel
+        </Button>
+        <Button
+          type="button"
+          variant="ink"
+          size="dock"
+          className="h-[34px]"
+          onClick={suggested ? sendChanges : sendComment}
+        >
+          {suggested ? "Send to implementer" : "Add comment"}
+        </Button>
+      </span>
+    </DockMotion>
+  )
+}
+
 /** Decided: the disposition with Undo and Next unit. */
 function DockDecided({ unit }: { unit: ReviewDeskData["unit"] }) {
   const dock = useAtomValue(dockAtom)
   const undo = useSetAtom(resetDockAtom)
+  if (unit.lane !== "human-required") {
+    const text =
+      dock === "agreed"
+        ? "You agreed with the agent"
+        : dock === "commented"
+          ? "Comment added as context"
+          : "Changes requested · sent to implementer"
+    return (
+      <DockMotion
+        key="decided"
+        role="status"
+        className={cn(DOCK_BAR, "gap-2.5")}
+      >
+        <span className="pr-1.5 text-[13.5px] font-medium">{text}</span>
+        <Button type="button" variant="dock-ghost" size="dock" onClick={undo}>
+          Undo
+        </Button>
+      </DockMotion>
+    )
+  }
   const text =
     dock === "approved"
       ? `Approved · ${unit.hunkCount} hunks`
@@ -244,8 +385,9 @@ function DockDecided({ unit }: { unit: ReviewDeskData["unit"] }) {
 
 /**
  * Sticky decision dock at the bottom of the unit. It is the only place a
- * disposition is made, and it states its scope: this unit's human-required
- * hunks, never the read-only neighbor.
+ * disposition is made, always per unit (never per lane), and it states its
+ * scope: this unit's hunks, never the read-only neighbor. Suggested units
+ * take Agree / Request changes; agentic and static units take a Comment.
  */
 export function DecisionDock({
   unit,
@@ -255,14 +397,23 @@ export function DecisionDock({
   markers: Record<string, ContextualMarker>
 }) {
   const dock = useAtomValue(dockAtom)
+  const human = unit.lane === "human-required"
   return (
     <div className="sticky bottom-5 z-10 mx-8 mt-auto mb-5 max-w-[calc(100%-64px)] self-center">
       <AnimatePresence mode="wait">
-        {dock === "rest" && <DockRest key="rest" unit={unit} />}
-        {dock === "composing" && (
-          <DockComposer key="composing" unit={unit} markers={markers} />
-        )}
-        {(dock === "approved" || dock === "changes-requested") && (
+        {dock === "rest" &&
+          (human ? (
+            <DockRest key="rest" unit={unit} />
+          ) : (
+            <DockLaneRest key="rest" unit={unit} />
+          ))}
+        {dock === "composing" &&
+          (human ? (
+            <DockComposer key="composing" unit={unit} markers={markers} />
+          ) : (
+            <DockLaneComposer key="composing" unit={unit} />
+          ))}
+        {dock !== "rest" && dock !== "composing" && (
           <DockDecided key="decided" unit={unit} />
         )}
       </AnimatePresence>

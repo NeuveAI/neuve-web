@@ -1,4 +1,5 @@
 import { atom } from "jotai"
+import { atomWithStorage } from "jotai/utils"
 import type { Virtualizer } from "@workspace/diffs"
 
 import { createReviewCommentRecord } from "@workspace/ui/neuve/review-comments/record"
@@ -11,11 +12,12 @@ import {
   reviewCommentRepositoryAtom,
 } from "@workspace/ui/neuve/review-comments/repository"
 import type { ReviewCommentRepository } from "@workspace/ui/neuve/review-comments/repository"
+import { openThreadAtom } from "@workspace/ui/neuve/review-comments/threads"
 import {
   rangeEquals,
   rangeKey,
 } from "@workspace/ui/neuve/review-desk/diff-model"
-import type { LineRange } from "@workspace/ui/neuve/types"
+import type { LineRange, ReviewLane } from "@workspace/ui/neuve/types"
 
 /**
  * Review desk interaction state.
@@ -30,13 +32,31 @@ import type { LineRange } from "@workspace/ui/neuve/types"
  *   lines    none ⇄ selected(file, range) — gutter click/drag/Shift/keys
  *            selected → composer(range) — chip, Enter/C, or the gutter "+"
  *            composer → saved (collapses into a pin) | cancelled | parked draft
- *   comment body  pin (L0, default) ⇄ open; dismiss one or all → pin
+ *   comment  pin ⇄ thread (the expanded layer, like a card)
+ *            Show comments → compact previews; Dismiss all → pins
  *   dock     rest → composing → changes-requested ─┐
  *            rest ──────────────→ approved ────────┤ undo → rest
  *            composing ── cancel ──→ rest           │
  */
 
-export type DockState = "rest" | "composing" | "approved" | "changes-requested"
+/**
+ * Decision dock. Human-required units: approve or request changes.
+ * Suggested units: agree or request changes (overrides the agent's
+ * approval). Agentic and static units: comment (context for the unit's
+ * next cycle). Decisions are always per unit, never per lane.
+ */
+export type DockState =
+  | "rest"
+  | "composing"
+  | "approved"
+  | "changes-requested"
+  | "agreed"
+  | "commented"
+
+export type DiffLayout = "stacked" | "split"
+export type BrowseMode = "units" | "files"
+/** New-commit notice: shown, parked as a corner pill, or none. */
+export type NoticeState = "shown" | "parked" | "hidden"
 
 /** The pin that owns its file's single shared hint (the layer places it). */
 export interface HoverHint {
@@ -70,9 +90,9 @@ export interface ReviewDeskState {
   attachment: string | null
   hoverHint: HoverHint | null
   /**
-   * Review-comment markers whose body is open in the margin. Bodies start
-   * collapsed to their pin (less is more); opening is explicit, and a saved
-   * comment opens so the reviewer sees it land.
+   * Review comments shown as compact previews in the margin ("Show
+   * comments"). They do not isolate; a comment's thread opens as the one
+   * expanded layer through `openMarker`, like a context card.
    */
   openBodies: ReadonlyArray<string>
   lineSelection: LineSelection | null
@@ -81,6 +101,14 @@ export interface ReviewDeskState {
   parkedDrafts: ReadonlyArray<ParkedDraft>
   /** Resolved review comments stay out of the margin unless asked for. */
   showResolved: boolean
+  layout: DiffLayout
+  wrap: boolean
+  browse: BrowseMode
+  notice: NoticeState
+  generatedOpen: boolean
+  openLanes: ReadonlyArray<ReviewLane>
+  /** Seeds the per-viewer stored value (stories only). */
+  railCollapsed?: boolean
 }
 
 export const INITIAL_REVIEW_DESK_STATE: ReviewDeskState = {
@@ -97,6 +125,12 @@ export const INITIAL_REVIEW_DESK_STATE: ReviewDeskState = {
   commentDraft: "",
   parkedDrafts: [],
   showResolved: false,
+  layout: "stacked",
+  wrap: true,
+  browse: "units",
+  notice: "shown",
+  generatedOpen: false,
+  openLanes: [],
 }
 
 /* ── Primitive atoms ───────────────────────────────────── */
@@ -126,6 +160,55 @@ export const closingComposerAtom = atom<ComposerTarget | null>(null)
  * (diff hosts wait rather than build a throwaway renderer); null outside the
  * desk, where component stories render every row.
  */
+/** The read-by tree row whose full path tooltip is showing. */
+export const treeTipAtom = atom<string | null>(null)
+
+/** Stacked or split diff (split pairs removed and added rows). */
+export const diffLayoutAtom = atom<DiffLayout>("stacked")
+/** Wrap long lines (on by default); off scrolls each file sideways. */
+export const wrapAtom = atom(true)
+/** Units / Files tabs at the top of the unit column. */
+export const browseModeAtom = atom<BrowseMode>("units")
+export const noticeAtom = atom<NoticeState>("shown")
+/** The static unit's generated diff, collapsed by default. */
+export const generatedOpenAtom = atom(false)
+/** Rail lane groups expanded in place (Lanes.dc.html). */
+export const openLanesAtom = atom<ReadonlyArray<ReviewLane>>([])
+/**
+ * Whether the unit column is wide enough for Split (980px, measured on the
+ * column, not the viewport). Below it Split falls back to Stacked.
+ */
+export const SPLIT_MIN_WIDTH = 980
+export const splitFitsAtom = atom(true)
+/** The layout the diff renders: the reviewer's choice unless Split can't fit. */
+export const effectiveLayoutAtom = atom<DiffLayout>((get) =>
+  get(diffLayoutAtom) === "split" && !get(splitFitsAtom)
+    ? "stacked"
+    : get(diffLayoutAtom)
+)
+
+export const toggleLaneAtom = atom(null, (get, set, lane: ReviewLane) => {
+  const open = get(openLanesAtom)
+  set(
+    openLanesAtom,
+    open.includes(lane) ? open.filter((l) => l !== lane) : [...open, lane]
+  )
+})
+
+/**
+ * The rail collapsed to its 60px icon column, remembered per viewer
+ * (browser storage). Toggled by its button or the `[` shortcut.
+ */
+export const RAIL_COLLAPSED_STORAGE_KEY = "neuve.rail-collapsed.v1"
+export const railCollapsedAtom = atomWithStorage(
+  RAIL_COLLAPSED_STORAGE_KEY,
+  false
+)
+
+export const toggleRailAtom = atom(null, (get, set) => {
+  set(railCollapsedAtom, !get(railCollapsedAtom))
+})
+
 export const diffVirtualizerAtom = atom<Virtualizer | null | "pending">(null)
 
 /** Every primitive atom with its value, for hydration in screens and stories. */
@@ -145,7 +228,22 @@ export function reviewDeskHydration(state: Partial<ReviewDeskState>) {
     [commentDraftAtom, s.commentDraft],
     [parkedDraftsAtom, s.parkedDrafts],
     [showResolvedAtom, s.showResolved],
+    [diffLayoutAtom, s.layout],
+    [wrapAtom, s.wrap],
+    [browseModeAtom, s.browse],
+    [noticeAtom, s.notice],
+    [generatedOpenAtom, s.generatedOpen],
+    [openLanesAtom, s.openLanes],
   ] as const
+}
+
+/** Seeds the stored rail state only when a story asks for one. */
+export function railHydration(state: Partial<ReviewDeskState>) {
+  const values = new Map<typeof railCollapsedAtom, boolean>()
+  if (state.railCollapsed !== undefined) {
+    values.set(railCollapsedAtom, state.railCollapsed)
+  }
+  return values
 }
 
 /** Hydration for the comment repository (the local one unless injected). */
@@ -171,7 +269,12 @@ export const isolatingAtom = atom(
 
 export const isDecidedAtom = atom((get) => {
   const dock = get(dockAtom)
-  return dock === "approved" || dock === "changes-requested"
+  return (
+    dock === "approved" ||
+    dock === "changes-requested" ||
+    dock === "agreed" ||
+    dock === "commented"
+  )
 })
 
 /* ── Actions ───────────────────────────────────────────── */
@@ -235,6 +338,20 @@ export const sendChangesAtom = atom(null, (_get, set) => {
   set(sheetMarkerAtom, null)
 })
 
+/** Suggested unit: agree with the agent's approval. */
+export const agreeAtom = atom(null, (_get, set) => {
+  set(dockAtom, "agreed")
+})
+
+/** Agentic or static unit: start a comment for the unit's next cycle. */
+export const startUnitCommentAtom = atom(null, (_get, set) => {
+  set(dockAtom, "composing")
+})
+
+export const sendUnitCommentAtom = atom(null, (_get, set) => {
+  set(dockAtom, "commented")
+})
+
 /** Cancel the composer or undo a decision: back to rest with no draft. */
 export const resetDockAtom = atom(null, (_get, set) => {
   set(dockAtom, "rest")
@@ -261,19 +378,6 @@ export const reopenMarkerAtom = atom(null, (get, set, markerKey: string) => {
   const current = get(openBodiesAtom)
   if (!current.includes(markerKey)) set(openBodiesAtom, [...current, markerKey])
 })
-
-/** Comment pins toggle their body: pin ⇄ open. */
-export const toggleCommentBodyAtom = atom(
-  null,
-  (get, set, markerKey: string) => {
-    if (get(openBodiesAtom).includes(markerKey)) {
-      set(dismissMarkerAtom, markerKey)
-    } else {
-      set(reopenMarkerAtom, markerKey)
-    }
-    set(hoverHintAtom, null)
-  }
-)
 
 /** Dismiss all: every open body collapses and any expanded layer closes. */
 export const dismissAllAtom = atom(null, (_get, set) => {
@@ -386,6 +490,8 @@ export interface SaveCommentInput {
   revision: string
   author: ReviewCommentAuthor
   anchor: ReviewCommentAnchor
+  /** The unit's agent: a saved comment opens a thread with it. */
+  agentId?: string
 }
 
 /**
@@ -398,8 +504,17 @@ export const saveCommentAtom = atom(
   (get, set, input: SaveCommentInput) => {
     const body = get(commentDraftAtom).trim()
     if (!body) return null
-    const record = createReviewCommentRecord({ ...input, body })
+    const { agentId, ...fields } = input
+    const record = createReviewCommentRecord({ ...fields, body })
     set(get(reviewCommentRepositoryAtom).saveAtom, record)
+    if (agentId) {
+      set(openThreadAtom, record.id, agentId, {
+        id: `${record.id}:comment`,
+        author: { kind: "human", ...record.author },
+        body: record.body,
+        at: record.createdAt,
+      })
+    }
     set(commentDraftAtom, "")
     set(closingComposerAtom, get(composerAtom))
     set(composerAtom, null)

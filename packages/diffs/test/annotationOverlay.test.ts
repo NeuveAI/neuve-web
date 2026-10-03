@@ -523,6 +523,27 @@ describe('overlay stacking rules', () => {
     }
   });
 
+  test('the expanded item stretches to the host bottom without growing the stack', async () => {
+    const ctx = setup(ANNOTATIONS);
+    try {
+      await waitForCode(ctx.container);
+      ctx.instance.expandAnnotation('doc');
+      const layout = ctx.instance.layoutAnnotationOverlay();
+      const expanded = layout.find((e) => e.anchorKey === 'additions:20')!;
+      // Stacked at its pin-row height (0 in jsdom), not the item's own
+      // stretched height, so items below are not pushed by the stretch.
+      expect(expanded.height).toBe(0);
+      const item = ctx
+        .shadow()
+        .querySelector<HTMLElement>('[data-overlay-item][data-expanded]')!;
+      expect(item.style.getPropertyValue('--diffs-overlay-item-top')).toBe(
+        `${Math.round(expanded.top!)}px`
+      );
+    } finally {
+      ctx.cleanup();
+    }
+  });
+
   test('stacks are kept inside the host: overflow moves items up, never overlapping', async () => {
     const ctx = setup(ANNOTATIONS);
     const proto = HTMLElement.prototype;

@@ -51,6 +51,13 @@ export const TIMING = {
   laneLift: 200, // active lane scaleY
   caption: 220, // lane caption enters
   capture: 12000, // capture mini-player timeline
+  linked: 160, // rail units sharing the pointed-at marker tone-shift
+  swap: 180, // rail collapse / diff layout swap fade
+  notice: 360, // new-commit notice drops in (emphasized decelerate)
+  noticeExit: 160, // notice shrinks away to the corner pill
+  message: 260, // a thread message arrives
+  working: 1100, // "working" dots cycle (loop; off with reduced motion)
+  detail: 240, // lineage row detail opens
   reduced: 150, // reduced-motion opacity tween
 } as const
 

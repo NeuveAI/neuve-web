@@ -1,16 +1,30 @@
 import { createFileRoute, notFound } from "@tanstack/react-router"
 
-import { reviewDeskFixture } from "@workspace/ui/fixtures/review-batch.fixtures"
+import {
+  agenticUnitFixture,
+  reviewDeskWithNewCommitFixture,
+  staticUnitFixture,
+  suggestedUnitFixture,
+} from "@workspace/ui/fixtures/review-batch.fixtures"
 import { ReviewDeskScreen } from "@workspace/ui/neuve/review-desk/review-desk-screen"
 
+/** Units with sample data: the human-required unit and one per other lane. */
+const UNITS = [
+  reviewDeskWithNewCommitFixture,
+  suggestedUnitFixture,
+  agenticUnitFixture,
+  staticUnitFixture,
+]
+
 /**
- * Review desk for one review unit. Only the fixture unit has sample data;
+ * Review desk for one review unit. Only the fixture units have sample data;
  * other unit ids are not found until a backend serves them.
  */
 export const Route = createFileRoute("/review/$unitId")({
   loader: ({ params }) => {
-    if (params.unitId !== reviewDeskFixture.unit.id) throw notFound()
-    return reviewDeskFixture
+    const data = UNITS.find((unit) => unit.unit.id === params.unitId)
+    if (!data) throw notFound()
+    return data
   },
   head: ({ loaderData }) => ({
     meta: [{ title: `${loaderData?.unit.title ?? "Review unit"} · Neuve` }],

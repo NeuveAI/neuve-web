@@ -65,6 +65,11 @@ All modified places carry a `NEUVE FORK` comment.
    - `src/style.css`: overlay layer styles (geometry via
      `--diffs-overlay-*` custom properties, L0 underline, expanded and
      active anchor rings, reduced-motion fallbacks).
+   - Sticky expanded content (round 2): the expanded item runs from its
+     anchor to the host bottom (`--diffs-overlay-item-top`, set by the
+     manager) so a host can make its card `position: sticky` and cap it at
+     the viewport; the item is stacked at its pin-row height, and only
+     slotted content takes pointer events.
 2. **Keyboard access to hunk expansion.** Expand buttons are focusable with an
    accessible name (`src/utils/createSeparator.ts`) and activate on
    Enter/Space (`src/managers/InteractionManager.ts`).

@@ -632,7 +632,16 @@ export class AnnotationOverlayManager {
     }
     for (const entry of measured) {
       const item = this.items.get(entry.anchorKey)!;
-      entry.height = item.element.hidden ? 0 : item.element.offsetHeight;
+      // NEUVE FORK: an expanded item stretches to the host bottom so its
+      // card can stick while scrolling; stack it at its pin-row height so
+      // expanding never moves (or is moved by) the other items.
+      const expanded =
+        this.expandedId != null && entry.annotationIds.includes(this.expandedId);
+      entry.height = item.element.hidden
+        ? 0
+        : expanded
+          ? item.pins.offsetHeight
+          : item.element.offsetHeight;
     }
 
     // Pass 3: stack in anchor order.
@@ -690,6 +699,11 @@ export class AnnotationOverlayManager {
       item.layout = entry;
       if (entry.top == null) continue;
       item.element.style.transform = `translateY(${Math.round(entry.top)}px)`;
+      // NEUVE FORK: lets an expanded item end at the host bottom (CSS).
+      item.element.style.setProperty(
+        '--diffs-overlay-item-top',
+        `${Math.round(entry.top)}px`
+      );
       item.element.toggleAttribute('data-displaced', entry.displaced);
       item.element.dataset.position = entry.source;
       // Only animate moves of items that were already placed, so the first

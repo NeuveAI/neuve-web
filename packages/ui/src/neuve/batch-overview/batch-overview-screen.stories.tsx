@@ -23,3 +23,8 @@ export const StaticAutomationLane: Story = {
 export const CapturePlaying: Story = {
   args: { initialState: { capturePlaying: true } },
 }
+
+/** The same header and Agents control as the desk, popover open. */
+export const AgentsOpen: Story = {
+  args: { agentsOpen: true },
+}

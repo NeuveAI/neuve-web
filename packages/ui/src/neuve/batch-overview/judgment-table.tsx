@@ -9,7 +9,11 @@ import {
   TriangleAlertIcon,
 } from "lucide-react"
 
+import { useAtomValue } from "jotai"
+
 import { cn } from "@workspace/ui/lib/utils"
+import { AgentTag } from "@workspace/ui/neuve/agents/agent-avatar"
+import { agentByIdAtom } from "@workspace/ui/neuve/agents/atoms"
 import { LaneGlyph } from "@workspace/ui/neuve/shared/lane-glyph"
 import { NeuveLink } from "@workspace/ui/neuve/shared/nav-link"
 import type { JudgmentUnit } from "@workspace/ui/neuve/types"
@@ -23,6 +27,8 @@ const STAT =
   "inline-flex items-center gap-1.5 text-[13px] whitespace-nowrap text-ink-2"
 
 function UnitRow({ unit, first }: { unit: JudgmentUnit; first: boolean }) {
+  const agents = useAtomValue(agentByIdAtom)
+  const agent = unit.agentId ? agents[unit.agentId] : undefined
   const SignalIcon =
     unit.signal.icon === "conflict" ? TriangleAlertIcon : ShieldIcon
   return (
@@ -39,6 +45,7 @@ function UnitRow({ unit, first }: { unit: JudgmentUnit; first: boolean }) {
         <span className="flex items-center gap-2.5 text-[15.5px] font-semibold tracking-[-0.01em]">
           <LaneGlyph lane="human-required" />
           {unit.title}
+          {agent && <AgentTag agent={agent} />}
         </span>
         <span
           className={cn(

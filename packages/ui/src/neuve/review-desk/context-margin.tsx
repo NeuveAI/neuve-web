@@ -23,21 +23,37 @@
  *          origin top-left (cardExit 160ms, accelerate); the new pin enters
  *          scale .96 → 1 (snappy)
  *
+ * Round 2:
+ *  rest    a pin shared with other units carries one 4px dot per unit
+ *          (max 3, currentColor 50%); no width growth, no raised edge
+ *    0ms   pointing at / opening it tone-shifts the linked rail units
+ *          (linked 160ms, rail storyboard)
+ *  open    the L2 card sticks at top 16px while the file scrolls, capped
+ *          at the viewport (scrolls inside itself, never sideways)
+ *    0ms   graph tree path tooltip fades in on real hover / focus-visible
+ *          (hint 140ms, iOS ease-out), wrapped inside the card
+ *
  * Reduced motion: opacity-only 150ms tweens; tone and dimming stay; the
  * layer drops its slide.
  * ───────────────────────────────────────────────────────── */
 
 import * as React from "react"
+import { useAtomValue, useSetAtom } from "jotai"
 import { motion, useReducedMotion } from "motion/react"
 import {
-  CheckIcon,
-  ChevronRightIcon,
+  ArrowRightIcon,
+  CircleDashedIcon,
+  FileTextIcon,
+  FlaskConicalIcon,
+  HistoryIcon,
   MessageSquarePlusIcon,
   PencilLineIcon,
+  SplitIcon,
+  WaypointsIcon,
   XIcon,
 } from "lucide-react"
+import type { LucideIcon } from "lucide-react"
 
-import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
 import {
   EASE,
@@ -47,8 +63,17 @@ import {
   ms,
 } from "@workspace/ui/lib/motion"
 import { cn } from "@workspace/ui/lib/utils"
-import type { ReviewCommentStatus } from "@workspace/ui/neuve/review-comments/record"
-import type { ContextualMarker, MarkerTone } from "@workspace/ui/neuve/types"
+import { HighlightedCode } from "@workspace/ui/neuve/shared/highlighted-code"
+import { NeuveLink } from "@workspace/ui/neuve/shared/nav-link"
+import { editorHref } from "@workspace/ui/neuve/shared/editor-links"
+import { treeTipAtom } from "@workspace/ui/neuve/review-desk/atoms"
+import type {
+  ContextualMarker,
+  MarkerCheckAction,
+  MarkerExcerpt,
+  MarkerTone,
+  ReadByNode,
+} from "@workspace/ui/neuve/types"
 
 const CARD = {
   offsetY: -4, // px the card rises from
@@ -101,13 +126,6 @@ const PIN_TONE: Record<MarkerTone, { pin: string; dot: string }> = {
   },
 }
 
-const BADGE_VARIANT = {
-  neutral: "marker-neutral",
-  req: "marker-req",
-  sug: "marker-sug",
-  batch: "marker-batch",
-} as const
-
 /* ── L0 pin ────────────────────────────────────────────── */
 
 export function MarginPin({
@@ -115,6 +133,7 @@ export function MarginPin({
   rangeLabel,
   on,
   disabled,
+  readOnly = false,
   onToggle,
   onHintStart,
   onHintEnd,
@@ -127,6 +146,8 @@ export function MarginPin({
   /** Its card is open (or, for a comment, its body is open). */
   on: boolean
   disabled: boolean
+  /** A read-only neighbor's own context: muted outline pin. */
+  readOnly?: boolean
   onToggle: () => void
   onHintStart: () => void
   onHintEnd: () => void
@@ -138,6 +159,11 @@ export function MarginPin({
   const isComment = marker.sourceKind === "review comment"
   const inverted = on
   const reduce = useReducedMotion()
+  // Shared with other units: one small dot per other unit (max 3), in the
+  // pin's own colour at 50%. No width growth, no raised edge.
+  const shared = marker.sharedWith?.length ?? 0
+  const sharedLabel =
+    shared > 0 ? ` · also in ${shared} other unit${shared > 1 ? "s" : ""}` : ""
   return (
     <motion.button
       initial={reduce ? { opacity: 0 } : { opacity: 0, scale: 0.96 }}
@@ -148,7 +174,7 @@ export function MarginPin({
       aria-label={
         isComment
           ? `Review comment by ${marker.title.replace(/ commented$/, "")}${rangeLabel ? ` on ${rangeLabel}` : ""}: ${marker.peek}`
-          : `${marker.short}: ${marker.peek}`
+          : `${marker.short}: ${marker.peek}${sharedLabel}`
       }
       tabIndex={disabled ? -1 : 0}
       onClick={onToggle}
@@ -160,10 +186,15 @@ export function MarginPin({
       }}
       onMouseLeave={onHintEnd}
       onBlur={onHintEnd}
+      data-shared={shared > 0 ? shared : undefined}
       className={cn(
         "relative inline-flex h-[22px] items-center gap-1.5 rounded-md border-0 px-2 font-mono text-[11px]",
         "transition-[background-color,transform] duration-120 ease-[cubic-bezier(.2,0,0,1)] active:scale-[.97] motion-reduce:transition-none motion-reduce:active:scale-100",
-        inverted ? "bg-ink text-paper shadow-none" : tone.pin,
+        inverted
+          ? "bg-ink text-paper shadow-none"
+          : readOnly
+            ? "bg-transparent text-ink-muted shadow-[inset_0_0_0_1px_var(--nv-line)] hover:bg-raised"
+            : tone.pin,
         disabled && "pointer-events-none",
         className
       )}
@@ -174,11 +205,22 @@ export function MarginPin({
           aria-hidden="true"
           className={cn(
             "size-1.5 rounded-[2px]",
-            inverted ? "rotate-0 bg-paper shadow-none" : tone.dot
+            inverted
+              ? "rotate-0 bg-paper shadow-none"
+              : readOnly
+                ? "bg-faint"
+                : tone.dot
           )}
         />
       )}
       {marker.short}
+      {shared > 0 && !isComment && (
+        <span aria-hidden="true" className="ml-px inline-flex gap-0.5">
+          {Array.from({ length: Math.min(shared, 3) }, (_, i) => (
+            <i key={i} className="size-1 rounded-full bg-current opacity-50" />
+          ))}
+        </span>
+      )}
     </motion.button>
   )
 }
@@ -268,172 +310,356 @@ export function DraftPin({
 
 /* ── L2 card ───────────────────────────────────────────── */
 
+/** Kind icon tile and label colour per source kind (Main.dc.html KIND). */
+const KIND: Record<
+  Exclude<MarkerTone, "comment">,
+  { icon: LucideIcon; tile: string; label: string }
+> = {
+  doc: {
+    icon: FileTextIcon,
+    tile: "bg-raised text-ink-2",
+    label: "text-ink-2",
+  },
+  graph: {
+    icon: WaypointsIcon,
+    tile: "bg-raised text-ink-2",
+    label: "text-ink-2",
+  },
+  conflict: {
+    icon: SplitIcon,
+    tile: "bg-req-tint text-req-ink",
+    label: "text-req-ink",
+  },
+  batch: {
+    icon: CircleDashedIcon,
+    tile: "bg-transparent text-ink-muted shadow-[inset_0_0_0_1px_var(--nv-line)]",
+    label: "text-ink-muted",
+  },
+  test: {
+    icon: FlaskConicalIcon,
+    tile: "bg-sug-tint text-sug-ink",
+    label: "text-sug-ink",
+  },
+  history: {
+    icon: HistoryIcon,
+    tile: "bg-raised text-ink-2",
+    label: "text-ink-2",
+  },
+}
+
+/** A pill-like quiet action ("Open source →", the callout's action). */
+const QUIET_ACTION =
+  "inline-flex h-7 flex-none items-center gap-1.5 rounded-[7px] border-0 px-[9px] text-xs whitespace-nowrap text-ink no-underline transition-colors duration-120 hover:text-ink motion-reduce:transition-none"
+
+/**
+ * Graph read-by tree: plain mono rows with `├`/`└` branches and the file on
+ * the right; an untraced edge says "not traced" in red. A truncated file
+ * shows its full `path:line` in a tooltip on real hover or keyboard focus,
+ * wrapped and kept inside the card.
+ */
+function ReadByTree({
+  markerKey,
+  nodes,
+}: {
+  markerKey: string
+  nodes: ReadonlyArray<ReadByNode>
+}) {
+  const tip = useAtomValue(treeTipAtom)
+  const setTip = useSetAtom(treeTipAtom)
+  const reduce = useReducedMotion()
+  return (
+    <div
+      role="list"
+      aria-label="Read by"
+      className="flex flex-col font-mono text-[11.5px] leading-[22px]"
+    >
+      {nodes.map((node, i) => {
+        const id = `${markerKey}:${i}`
+        const show = () => {
+          if (node.fullPath) setTip(id)
+        }
+        const hide = () =>
+          setTip((current) => (current === id ? null : current))
+        return (
+          <div
+            key={id}
+            role="listitem"
+            data-tree-row={i}
+            onPointerEnter={(event) => {
+              if (event.pointerType === "mouse") show()
+            }}
+            onPointerLeave={hide}
+            className="relative flex min-w-0 items-baseline gap-1.5"
+          >
+            {tip === id && node.fullPath && (
+              <motion.span
+                role="tooltip"
+                id={`${id}:tip`}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={
+                  reduce
+                    ? { duration: 0 }
+                    : { duration: ms(TIMING.hint), ease: EASE.iosOut }
+                }
+                className="pointer-events-none absolute right-0 bottom-[calc(100%+2px)] z-3 box-border w-max max-w-full rounded-md bg-peek px-2 py-1 text-[11px] leading-4 break-all whitespace-normal text-peek-fg"
+              >
+                {node.fullPath}
+              </motion.span>
+            )}
+            <span aria-hidden="true" className="whitespace-pre text-faint">
+              {node.prefix}
+            </span>
+            <span
+              className={cn(
+                "whitespace-nowrap",
+                node.tone === "root" && "text-ink-muted",
+                node.tone === "node" && "text-ink",
+                node.tone === "untraced" && "text-req-fg"
+              )}
+            >
+              {node.name}
+            </span>
+            <span className="flex-auto" />
+            {node.where && (
+              <span
+                tabIndex={node.fullPath ? 0 : undefined}
+                aria-label={node.fullPath}
+                aria-describedby={tip === id ? `${id}:tip` : undefined}
+                onFocus={(event) => {
+                  if (event.currentTarget.matches(":focus-visible")) show()
+                }}
+                onBlur={hide}
+                className={cn(
+                  "min-w-0 truncate rounded-[3px] text-[10.5px]",
+                  node.tone === "untraced" ? "text-req-fg" : "text-ink-muted"
+                )}
+              >
+                {node.where}
+              </span>
+            )}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+function Excerpt({
+  markerKey,
+  excerpt,
+}: {
+  markerKey: string
+  excerpt: MarkerExcerpt
+}) {
+  switch (excerpt.kind) {
+    case "tree":
+      return <ReadByTree markerKey={markerKey} nodes={excerpt.nodes} />
+    case "versus":
+      return (
+        <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-stretch gap-1.5">
+          <div className="flex flex-col gap-1 rounded-lg bg-paper px-[9px] py-2">
+            <span className="font-mono text-[10px] text-ink-muted">
+              {excerpt.a.source}
+            </span>
+            <span className="text-xs leading-4">{excerpt.a.text}</span>
+          </div>
+          <span className="self-center font-mono text-[10px] text-faint">
+            vs
+          </span>
+          <div className="flex flex-col gap-1 rounded-lg bg-req-tint px-[9px] py-2">
+            <span className="font-mono text-[10px] text-req-ink">
+              {excerpt.b.source}
+            </span>
+            <span className="text-xs leading-4">{excerpt.b.text}</span>
+          </div>
+        </div>
+      )
+    case "code":
+      return (
+        <div className="rounded-lg bg-paper px-2.5 py-2 font-mono text-[11.5px] leading-[18px] wrap-anywhere whitespace-pre-wrap">
+          <HighlightedCode code={excerpt.code} />
+        </div>
+      )
+    case "quote":
+      return (
+        <div className="grid grid-cols-[14px_minmax(0,1fr)] gap-1.5">
+          <span
+            aria-hidden="true"
+            className="font-serif text-[26px] leading-[22px] text-faint"
+          >
+            “
+          </span>
+          <span className="text-[12.5px] leading-[18px] text-ink">
+            {excerpt.text}
+          </span>
+        </div>
+      )
+  }
+}
+
+/** The callout's single action. */
+function CheckActionButton({
+  action,
+  onAction,
+}: {
+  action: MarkerCheckAction
+  onAction: (action: MarkerCheckAction) => void
+}) {
+  const className = cn(
+    QUIET_ACTION,
+    "self-start bg-surface shadow-[0_0_0_1px_var(--nv-line)] hover:bg-raised"
+  )
+  const icon = (
+    <ArrowRightIcon aria-hidden="true" className="size-3" strokeWidth={1.9} />
+  )
+  if (action.kind === "unit") {
+    return (
+      <NeuveLink
+        destination={{ to: "unit", unitId: action.unitId }}
+        className={className}
+      >
+        {action.label}
+        {icon}
+      </NeuveLink>
+    )
+  }
+  if (action.kind === "file") {
+    return (
+      <a href={editorHref("VS Code", action.path)} className={className}>
+        {action.label}
+        {icon}
+      </a>
+    )
+  }
+  return (
+    <button
+      type="button"
+      className={className}
+      onClick={() => onAction(action)}
+    >
+      {action.label}
+      {icon}
+    </button>
+  )
+}
+
+/**
+ * L2 card, restyled per source kind: kind icon tile and one kind label that
+ * already carries status, title + mono meta, the kind-specific excerpt,
+ * why it's here, the "Before you decide" callout with one action, and a
+ * quiet "Open source →". It sticks at the top of the viewport while the
+ * file scrolls, capped at the viewport height, and never scrolls sideways.
+ */
 export function ContextCard({
   marker,
   onClose,
   onOpenSource,
+  onCheckAction = () => {},
+  sticky = true,
   className,
 }: {
   marker: ContextualMarker
   onClose: () => void
   onOpenSource: () => void
+  onCheckAction?: (action: MarkerCheckAction) => void
+  /** Off in component stories that render the card on its own. */
+  sticky?: boolean
   className?: string
 }) {
   const float = useFloatMotion(true)
+  const kind = KIND[marker.tone === "comment" ? "doc" : marker.tone]
+  const Icon = kind.icon
   return (
     <motion.div
       role="region"
       aria-label={marker.title}
+      data-context-card=""
       {...float}
       style={{ transformOrigin: "top left" }}
       className={cn(
-        "box-border flex w-[300px] flex-col gap-2.5 rounded-xl bg-surface px-4 pt-3.5 pb-3 font-sans text-sm text-ink shadow-card",
+        "box-border flex w-full flex-col overflow-x-hidden rounded-xl bg-surface pb-0 font-sans text-sm text-ink shadow-card",
+        sticky &&
+          "sticky top-4 mt-1.5 max-h-[calc(100vh-32px)] overflow-y-auto overscroll-contain",
         className
       )}
     >
-      <div className="flex items-center gap-2">
-        <Badge variant={BADGE_VARIANT[marker.badgeTone]}>{marker.badge}</Badge>
-        <span className="flex-auto" />
+      <div className="flex items-center gap-2 pt-3 pr-2.5 pl-3.5">
+        <span
+          aria-hidden="true"
+          className={cn(
+            "inline-flex size-[22px] shrink-0 items-center justify-center rounded-md",
+            kind.tile
+          )}
+        >
+          <Icon className="size-[13px]" strokeWidth={1.8} />
+        </span>
+        <span
+          className={cn(
+            "min-w-0 flex-auto truncate label-mono text-[10.5px]",
+            kind.label
+          )}
+        >
+          {marker.kindLabel}
+        </span>
         <Button
           type="button"
           variant="quiet"
           size="icon-card"
           aria-label="Close context"
           onClick={onClose}
+          className="size-[26px]"
         >
-          <XIcon aria-hidden="true" className="size-3" />
+          <XIcon aria-hidden="true" className="size-[11px]" />
         </Button>
       </div>
-      <div className="flex flex-col gap-0.5">
-        <div className="text-[13.5px] leading-[18px] font-semibold">
+      <div className="flex flex-col gap-0.5 px-3.5 pt-2.5">
+        <span className="text-sm leading-[19px] font-semibold tracking-[-0.01em] wrap-anywhere">
           {marker.title}
-        </div>
-        <div className="font-mono text-[11px] leading-[15px] text-ink-muted">
+        </span>
+        <span className="font-mono text-[10.5px] wrap-anywhere text-ink-muted">
           {marker.meta}
-        </div>
+        </span>
       </div>
-      <div className="rounded-lg bg-paper px-2.5 py-2 text-[12.5px] leading-[18px] whitespace-pre-line">
-        {marker.quote}
-      </div>
-      {marker.quoteAgainst && (
-        <div className="rounded-lg bg-req-tint px-2.5 py-2 text-[12.5px] leading-[18px] whitespace-pre-line">
-          {marker.quoteAgainst}
+      {marker.excerpt && (
+        <div className="px-3.5 pt-3">
+          <Excerpt markerKey={marker.key} excerpt={marker.excerpt} />
         </div>
       )}
-      <dl className="m-0 grid grid-cols-[76px_minmax(0,1fr)] gap-x-2.5 gap-y-1.5 text-xs leading-[17px]">
-        <dt className="text-ink-muted">Establishes</dt>
-        <dd className="m-0">{marker.establishes}</dd>
-        <dt className="text-ink-muted">Applies here</dt>
-        <dd className="m-0">{marker.applies}</dd>
-        <dt className="text-ink-muted">Uncertain</dt>
-        <dd className="m-0 text-req-fg">{marker.uncertain}</dd>
-      </dl>
-      <div className="flex items-center gap-2 pt-0.5">
-        <Button
+      <p className="m-0 mx-3.5 mt-3 text-[12.5px] leading-[18px] text-ink-2">
+        {marker.applies}
+      </p>
+      {marker.check && (
+        <div className="mx-3.5 mt-3 flex flex-col gap-2 rounded-lg bg-raised py-2.5 pr-2.5 pl-3">
+          <span className="label-mono text-[10px]">Before you decide</span>
+          <span className="text-[12.5px] leading-[18px] text-ink">
+            {marker.check}
+          </span>
+          {marker.checkAction && (
+            <CheckActionButton
+              action={marker.checkAction}
+              onAction={onCheckAction}
+            />
+          )}
+        </div>
+      )}
+      <div className="mt-3 flex justify-end px-2.5 pt-2 pb-2.5">
+        <button
           type="button"
-          variant="ink"
-          size="compact"
           onClick={onOpenSource}
           aria-haspopup="dialog"
           data-source-trigger=""
+          className={cn(QUIET_ACTION, "bg-raised hover:bg-raised-2")}
         >
           Open source
-          <ChevronRightIcon data-icon="inline-end" aria-hidden="true" />
-        </Button>
-        <span className="text-[11.5px] text-ink-muted">{marker.cited}</span>
+          <ArrowRightIcon
+            aria-hidden="true"
+            className="size-3"
+            strokeWidth={1.9}
+          />
+        </button>
       </div>
     </motion.div>
-  )
-}
-
-/* ── Open comment body (dismissible) ───────────────────── */
-
-export function CommentBody({
-  marker,
-  status,
-  onDismiss,
-  onToggleStatus,
-  className,
-}: {
-  marker: ContextualMarker
-  status: ReviewCommentStatus
-  onDismiss: () => void
-  onToggleStatus: () => void
-  className?: string
-}) {
-  const float = useFloatMotion(false)
-  const author = marker.title.replace(/ commented$/, "")
-  return (
-    <motion.article
-      aria-label={`Review comment by ${author}`}
-      {...float}
-      onKeyDown={(event) => {
-        if (event.key === "Escape") {
-          event.stopPropagation()
-          onDismiss()
-        }
-      }}
-      className={cn(
-        "box-border flex w-full flex-col gap-1.5 rounded-[10px] bg-surface px-3 pt-2 pb-2.5 font-sans text-ink shadow-card",
-        className
-      )}
-    >
-      <div className="flex items-center gap-2">
-        <span
-          aria-hidden="true"
-          className="inline-flex size-5 items-center justify-center rounded-full bg-raised font-mono text-[10px] text-ink-2"
-        >
-          {marker.short}
-        </span>
-        <span className="min-w-0 truncate text-xs font-medium">{author}</span>
-        {marker.trace?.carriedForward && (
-          <span className="font-mono text-[10.5px] text-ink-muted">
-            earlier revision
-          </span>
-        )}
-        <span className="flex-auto" />
-        <Button
-          type="button"
-          variant="quiet"
-          size="icon-xs"
-          aria-label="Dismiss comment"
-          onClick={onDismiss}
-          className="size-6"
-        >
-          <XIcon aria-hidden="true" className="size-3" />
-        </Button>
-      </div>
-      <p
-        className={cn(
-          "m-0 line-clamp-3 text-[12.5px] leading-[18px] whitespace-pre-line",
-          status === "resolved" && "text-ink-muted"
-        )}
-      >
-        {marker.quote}
-      </p>
-      <div className="flex items-center gap-2">
-        <span className="min-w-0 flex-auto truncate font-mono text-[10.5px] text-ink-muted">
-          {marker.meta.split(" · ").slice(1).join(" · ")}
-        </span>
-        <Button
-          type="button"
-          variant="quiet"
-          size="xs"
-          onClick={onToggleStatus}
-          aria-pressed={status === "resolved"}
-          className="h-6 px-1.5 text-[11.5px] font-normal"
-        >
-          {status === "resolved" ? (
-            <>
-              <CheckIcon aria-hidden="true" />
-              Resolved
-            </>
-          ) : (
-            "Resolve"
-          )}
-        </Button>
-      </div>
-    </motion.article>
   )
 }
 

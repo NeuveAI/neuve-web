@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as ChangesCommitRouteImport } from './routes/changes/$commit'
 import { Route as ReviewUnitIdRouteImport } from './routes/review/$unitId'
 import { Route as ApiHarnessOperationRouteImport } from './routes/api.harness.$operation'
 import { Route as ApiReviewOperationRouteImport } from './routes/api.review.$operation'
@@ -17,6 +18,11 @@ import { Route as ApiReviewOperationRouteImport } from './routes/api.review.$ope
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ChangesCommitRoute = ChangesCommitRouteImport.update({
+  id: '/changes/$commit',
+  path: '/changes/$commit',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ReviewUnitIdRoute = ReviewUnitIdRouteImport.update({
@@ -37,12 +43,14 @@ const ApiReviewOperationRoute = ApiReviewOperationRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/changes/$commit': typeof ChangesCommitRoute
   '/review/$unitId': typeof ReviewUnitIdRoute
   '/api/harness/$operation': typeof ApiHarnessOperationRoute
   '/api/review/$operation': typeof ApiReviewOperationRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/changes/$commit': typeof ChangesCommitRoute
   '/review/$unitId': typeof ReviewUnitIdRoute
   '/api/harness/$operation': typeof ApiHarnessOperationRoute
   '/api/review/$operation': typeof ApiReviewOperationRoute
@@ -50,6 +58,7 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/changes/$commit': typeof ChangesCommitRoute
   '/review/$unitId': typeof ReviewUnitIdRoute
   '/api/harness/$operation': typeof ApiHarnessOperationRoute
   '/api/review/$operation': typeof ApiReviewOperationRoute
@@ -58,18 +67,21 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/changes/$commit'
     | '/review/$unitId'
     | '/api/harness/$operation'
     | '/api/review/$operation'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/changes/$commit'
     | '/review/$unitId'
     | '/api/harness/$operation'
     | '/api/review/$operation'
   id:
     | '__root__'
     | '/'
+    | '/changes/$commit'
     | '/review/$unitId'
     | '/api/harness/$operation'
     | '/api/review/$operation'
@@ -77,6 +89,7 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  ChangesCommitRoute: typeof ChangesCommitRoute
   ReviewUnitIdRoute: typeof ReviewUnitIdRoute
   ApiHarnessOperationRoute: typeof ApiHarnessOperationRoute
   ApiReviewOperationRoute: typeof ApiReviewOperationRoute
@@ -89,6 +102,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/changes/$commit': {
+      id: '/changes/$commit'
+      path: '/changes/$commit'
+      fullPath: '/changes/$commit'
+      preLoaderRoute: typeof ChangesCommitRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/review/$unitId': {
@@ -117,6 +137,7 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  ChangesCommitRoute: ChangesCommitRoute,
   ReviewUnitIdRoute: ReviewUnitIdRoute,
   ApiHarnessOperationRoute: ApiHarnessOperationRoute,
   ApiReviewOperationRoute: ApiReviewOperationRoute,

@@ -124,9 +124,6 @@ export function reviewCommentToMarker(
   const revision = shortRevision(record.revision)
   const where = `${record.anchor.filePath} ${rangeLabel(range)}`
   const when = formatDate(record.createdAt)
-  const quotedLines = record.anchor.lines
-    .map((line) => line.text.trim() || "(blank line)")
-    .join("\n")
   return {
     key: commentMarkerKey(record.id),
     sourceKind: "review comment",
@@ -140,29 +137,50 @@ export function reviewCommentToMarker(
     tone: "comment",
     short: record.author.initials,
     peek: firstLine(record.body),
-    badge: "Review comment",
-    badgeTone: "neutral",
+    kindLabel: "Review comment",
     title: `${record.author.name} commented`,
     meta: `${where} · ${revision} · ${when}`,
     quote: record.body,
-    establishes: "A reviewer's note on these lines.",
     applies: carriedForward
       ? `Written on ${revision}; the same lines are here now.`
       : `Written on this revision (${revision}).`,
-    uncertain:
-      record.status === "open"
-        ? "Not resolved yet."
-        : "Resolved; kept for later cycles.",
-    cited: carriedForward ? "Carried forward" : "This cycle",
     source: {
-      kind: "Review comment · human",
-      title: `${record.author.name} on ${record.anchor.filePath}`,
-      meta: `${where} · ${record.anchor.hunk.header} · ${revision} · ${when}`,
-      paragraphs: [
-        { text: quotedLines, cited: false },
-        { text: record.body, cited: true },
+      kind: "Comment",
+      chips: [
+        {
+          text: record.status === "open" ? "Open" : "Resolved",
+          tone: record.status === "open" ? "sug" : "neutral",
+        },
+        ...(carriedForward
+          ? [{ text: "Carried forward", tone: "outline" as const }]
+          : []),
       ],
-      citedBy: `Comment ${record.id} · unit ${record.unitId}`,
+      title: `${record.author.name} on ${record.anchor.filePath}`,
+      subtitle: `${where} · ${record.anchor.hunk.header}`,
+      actions: [
+        {
+          kind: "editor",
+          editor: "VS Code",
+          path: `${record.anchor.filePath}:${range.start}`,
+        },
+        { kind: "copy-path", path: record.anchor.filePath },
+      ],
+      facts: [
+        { label: "Author", value: record.author.name },
+        { label: "Written on", value: revision, mono: true },
+      ],
+      blocks: [
+        {
+          kind: "code",
+          lines: record.anchor.lines.map((line) => ({
+            number: line.lineNumber,
+            text: line.text,
+            cited: true,
+          })),
+        },
+        { kind: "quote", text: record.body },
+      ],
+      citedBy: [`Unit ${record.unitId}`],
     },
   }
 }

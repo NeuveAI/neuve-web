@@ -8,25 +8,31 @@ import { LaneBar } from "@workspace/ui/neuve/batch-overview/lane-bar"
 import { VerificationGrid } from "@workspace/ui/neuve/batch-overview/verification-grid"
 import { batchOverviewHydration } from "@workspace/ui/neuve/batch-overview/atoms"
 import type { BatchOverviewState } from "@workspace/ui/neuve/batch-overview/atoms"
-import { BrandMark } from "@workspace/ui/neuve/shared/brand-mark"
-import { ThemeToggle } from "@workspace/ui/neuve/shared/theme-toggle"
+import { agentsHydration } from "@workspace/ui/neuve/agents/atoms"
+import type { AgentConnector } from "@workspace/ui/neuve/agents/atoms"
+import { AppHeader } from "@workspace/ui/neuve/shared/app-header"
 import type { BatchOverviewData } from "@workspace/ui/neuve/types"
 
 export interface BatchOverviewScreenProps {
   data: BatchOverviewData
   initialState?: Partial<BatchOverviewState>
+  /** Connects agents from the header (a local mock by default). */
+  agentConnector?: AgentConnector
+  /** Opens the Agents popover (stories). */
+  agentsOpen?: boolean
 }
 
-function BatchOverview({ data, initialState = {} }: BatchOverviewScreenProps) {
+function BatchOverview({
+  data,
+  initialState = {},
+  agentConnector,
+  agentsOpen = false,
+}: BatchOverviewScreenProps) {
   useHydrateAtoms(batchOverviewHydration(initialState))
+  useHydrateAtoms(agentsHydration(data.agents, agentConnector, agentsOpen))
   return (
     <div className="min-h-svh bg-paper font-sans text-sm text-ink">
-      <header className="box-border flex min-h-14 flex-wrap items-center gap-4 border-b border-line px-5 py-2">
-        <BrandMark />
-        <span className="text-[13px] text-ink-muted">{data.repo}</span>
-        <div className="flex-auto" />
-        <ThemeToggle />
-      </header>
+      <AppHeader repo={data.repo} branch={data.branch} commit={data.revision} />
       <div className="mx-auto box-border flex max-w-[1180px] flex-col gap-14 px-6 pt-14 pb-24">
         <BatchHero data={data} />
         <LaneBar lanes={data.lanes} />

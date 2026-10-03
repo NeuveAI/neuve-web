@@ -62,5 +62,5 @@ export function Logo({ className }: { className?: string }) {
         clipRule="evenodd"
       />
     </svg>
-  );
+  )
 }
